@@ -296,3 +296,21 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 .dnote{font-size:12px;color:var(--muted);margin-top:6px}
 .dfoot{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
 @media (max-width:640px){#rDecision{position:fixed;inset:auto 0 0 0;padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:60;display:block}.decision{max-height:72vh;max-width:none;border-radius:14px}.decision h4{font-size:18px}.decision{padding:12px}}
+
+/* boost battery */
+.ers{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:12px}
+.ers .bar{flex:1;height:8px}
+.ers .bar i{background:linear-gradient(90deg,#7c4dff,#21d4fd)}
+.boostbtn{min-width:104px}
+.boostbtn.on{background:linear-gradient(90deg,#7c4dff,#21d4fd);border-color:transparent;color:#fff;animation:pulse .8s infinite}
+.attack{font-size:12px;font-weight:700;color:#b9a4ff;margin:-2px 0 8px}
+/* board + trophies */
+.bar i.lowconf{background:var(--red)}
+.boardmiss{border-color:rgba(232,52,63,.5)}
+.trophies{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.trophy{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px;opacity:.55}
+.trophy.got{opacity:1;border-color:rgba(255,176,0,.5);background:linear-gradient(180deg,rgba(255,176,0,.08),var(--bg2))}
+.trophy .ti{font-size:24px;line-height:1.2}
+.trophy b{display:block;font-size:13px;margin-top:2px}
+.trophy span{font-size:11px;color:var(--muted)}
+.trophycard{border-color:rgba(255,176,0,.6);background:linear-gradient(180deg,rgba(255,176,0,.12),var(--panel))}

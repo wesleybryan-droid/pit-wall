@@ -12,7 +12,7 @@ const teamName = () => (PW.state() ? PW.state().teams.you.name : "your team");
 const STEPS = [
   { screen: "hq", sel: ".hero", title: "Welcome to the pit wall", text: () => `You run <b>${esc(teamName())}</b>, the slowest team on the grid. This card is your next race. Each circuit rewards something different: check what it <b>favors</b>, the <b>tire wear</b>, the <b>rain chance</b> and how hard <b>overtaking</b> is.` },
   { screen: "hq", sel: ".cmp", title: "Where you stand", text: "This chart compares every car at this circuit. You start at the bottom. Upgrades close the gap, and each rating point is worth about 0.07 seconds a lap." },
-  { screen: "hq", sel: "#status", title: "Watch the money", text: "Sponsors and TV money come in every race, and salaries and running costs go out. Research is paid up front. If your cash falls below −$10M, the bank closes the team." },
+  { screen: "hq", sel: "#status", title: "Money and the board", text: "Sponsors and TV money come in every race, and salaries and running costs go out. If cash falls below −$10M, the bank closes the team. The <b>board</b> also sets a target position each season. Hit it for a bonus. Miss it badly and they'll fire you." },
   { screen: "hq", sel: '.tab[data-v="factory"]', title: "Upgrade the car", text: "The Factory is where races are really won. Let's look.", next: { label: "Open the Factory ›", go: () => PW.ui.setTab("factory") } },
   { screen: "factory", sel: ".areas", title: "Research projects", text: "Each area has three tiers of upgrades. <b>Safe</b> projects always deliver. <b>Bold</b> ones give roughly double the gain but can fail in testing and waste the money. Match your upgrades to the circuits ahead: Aero for twisty tracks, Engine for fast ones." },
   { screen: "factory", sel: ".slots", title: "Slots and the budget cap", text: "You can run two projects at once (three with a Technical Director rated 80+). Projects finish after the number of races shown. A season-wide development cap limits total spending. <b>Tip:</b> start a project before your first race.", next: { label: "Open the Team ›", go: () => PW.ui.setTab("team") } },
@@ -20,13 +20,14 @@ const STEPS = [
   { screen: "team", sel: "#staff", title: "Key staff", text: "Every staff member changes the game. A better Race Engineer gives smarter strategy calls, a better Pit Crew Chief gives faster stops, and so on. Hire upgrades when you can afford them.", next: { label: "Open Sponsors ›", go: () => PW.ui.setTab("sponsors") } },
   { screen: "sponsors", sel: ".page", title: "Sponsors", text: "Sponsors pay every race, plus a bonus for hitting their goal. You have two slots (three with a Commercial Director rated 80+). New offers arrive every three races, and better results bring bigger deals.", next: { label: "Back to HQ ›", go: () => PW.ui.setTab("hq") } },
   { screen: "hq", sel: '[data-a="weekend"]', title: "Race weekend", text: "When you're ready, start the race weekend. The walkthrough will pick up there.", done: "Got it" },
+  { screen: "practice", sel: ".choice", title: "Friday practice", text: "Every weekend starts with practice. You have time for <b>two programs</b>: setup work, tire long runs, qualifying sims or reliability checks. Each gives a different edge, so pick what this circuit needs." },
   { screen: "quali", sel: ".choice", title: "Car setup", text: "First pick the setup. <b>Low downforce</b> suits fast tracks like Monza. <b>High downforce</b> suits twisty ones like Monaco and is kinder to tires. Your engineer marks his pick, but if your engine is strong, low downforce can still pay off." },
   { screen: "quali", sel: ".qmode", title: "Qualifying", text: "Pick an engine mode, then run qualifying. <b>Max attack</b> is a little faster but strains the engine for the race. Check the <b>weather radar</b> below: if rain is likely, plan for it." },
   { screen: "strategy", sel: ".gridlist", title: "The starting grid", text: "Here's where everyone starts, with the gap to pole position. Your cars are outlined." },
   { screen: "strategy", sel: ".card.team .choice", title: "Choose a strategy", text: "Soft tires are fast but wear out quickly. Mediums are balanced. Hards last longest. Wets are only for rain. Your engineer marks his pick. In a dry race you <b>must use two different compounds</b> or get a 20-second penalty. Pick a plan for each car, then hit <b>Lights out</b>." },
   { screen: "race", sel: ".mapwrap", race: true, title: "The race is on", text: "Each car is drawn in its team color. Yours glow white and show their names. 1× is about 6 seconds a lap. Speed up with the buttons at the top, or pause with the space bar. With <b>Auto-pause</b> on, the race stops by itself whenever there's a call to make." },
   { screen: "race", sel: ".tower", race: true, title: "Timing tower", text: "Positions, the gap to the leader and each car's current tire. PIT means a car is stopping, and OUT means it has retired." },
-  { screen: "race", sel: ".carctl", race: true, title: "Your controls", text: "The <b>tire bar</b> shows grip left. <b>Push</b> is faster but wears tires and the engine, and <b>Save tires</b> makes them last. Tap a tire under <b>Box for</b> to pit at the end of the lap. Your planned stops happen on their own unless you change them." },
+  { screen: "race", sel: ".carctl", race: true, title: "Your controls", text: "The <b>tire bar</b> shows grip left. <b>Push</b> is faster but wears tires and the engine, and <b>Save tires</b> makes them last. Tap a tire under <b>Box for</b> to pit at the end of the lap. <b>⚡ Boost</b> uses the battery for extra speed to attack or defend. It recharges as you drive, faster in Save mode." },
   { screen: "race", sel: ".radio", race: true, title: "Listen to the radio", text: "Your engineer calls out worn tires, rain and safety cars. A <b>safety car</b> bunches the field, which makes it the cheapest time to pit. When rain arrives, box for wets fast.", next: { label: "Start racing ›", go: () => { const R = PW.ui.R; if (R) R.paused = !!R.decision; } } },
   { screen: "results", sel: ".podium", title: "After the race", text: "Points, prize money, finished research and driver morale all update here. That's the whole loop: upgrade, hire, race, repeat. Get from the back of the grid to the championship. Good luck!", done: "Let's go" },
 ];
@@ -117,6 +118,7 @@ const GUIDE = `
 </ul>
 <h3>Race weekend</h3>
 <ol>
+<li><b>Friday practice:</b> pick two programs: setup work, tire long runs, qualifying sims or reliability checks.</li>
 <li><b>Setup and qualifying:</b> pick low, balanced or high downforce for the circuit, then Standard or Max attack engine mode (faster, but higher breakdown risk in the race). The weather radar shows the chance of rain.</li>
 <li><b>Strategy:</b> choose a tire plan for each driver. In a dry race you must use two different compounds.</li>
 <li><b>The race:</b> watch it live and make the calls.</li>
@@ -131,6 +133,7 @@ const GUIDE = `
 <ul>
 <li><b>Box for (tire):</b> the car pits at the end of the lap and fits that tire. Tap it again to cancel.</li>
 <li><b>Save tires / Balanced / Push:</b> pushing is faster but wears tires and raises breakdown risk.</li>
+<li><b>⚡ Boost:</b> spends battery for about 0.6s a lap of extra speed and a much better chance to overtake or defend. A full battery lasts about 2½ laps of boosting and recharges as you drive (fastest in Save mode). Rivals use theirs too.</li>
 <li><b>Team orders:</b> when your cars run nose to tail, you can swap them. The demoted driver won't like it.</li>
 <li><b>Speed:</b> 1× (about 6 seconds a lap) to 8×, pause (space bar), or ⏭ to skip to the finish.</li>
 <li><b>Auto-pause:</b> on by default. The race freezes for safety cars, rain on the radar, rain arriving or clearing, and fading tires. Tap a tire to box (green ring = engineer's suggestion), then <b>Keep racing</b>.</li>
@@ -145,6 +148,8 @@ const GUIDE = `
 <h3>Money and seasons</h3>
 <ul>
 <li>Keep an eye on <b>Net per race</b> on HQ. Below −$10M cash, the team goes into administration.</li>
+<li>The <b>board</b> sets a target finishing position each season. Hit it for an $8M bonus and more confidence. Miss it and confidence drops. At zero, you're fired.</li>
+<li>The <b>trophy cabinet</b> (under Standings) tracks 14 achievements, from first points to the championship.</li>
 <li>Each season has 12 rounds, a mid-season rule change, and prize money by championship position.</li>
 <li>Between seasons, new rules pull every car toward the middle, drivers age, and contracts end.</li>
 </ul>

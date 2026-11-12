@@ -4,6 +4,8 @@
 const { rand, clamp, gauss, pick } = PW;
 
 /* ---------- shared helpers ---------- */
+const BOOST_SPEED = 1.0075;  // about 0.65s a lap faster while boosting
+const BOOST_DRAIN = 42;      // % of battery used per lap of boosting
 const pitRating = team => team.player ? PW.state().staff.pit.rating : Math.round(40 + PW.TEAMS.find(t => t.id === team.id).tier * 45);
 const lifeOf = (t, c, tyreRating) => PW.TYRES[t].life / (c.wear * PW.state().mods.wearMul) * (0.8 + (tyreRating || 65) / 300);
 
@@ -40,15 +42,17 @@ PW.weatherPlan = function (c, wetStart) {
   }
   return wx;
 };
-PW.rainOutlook = function (wx, wetStart) {
+PW.rainOutlook = function (wx, wetStart, c) {
+  c = c || PW.circuit();
   const re = PW.state().staff.re.rating;
-  const truth = wetStart ? (wx.length ? 0.35 : 0.85) : (wx.length ? 0.7 : 0.1);
-  const p = clamp(truth + gauss() * (100 - re) / 220, 0.05, 0.95);
+  const truth = wetStart ? (wx.length ? 0.35 : 0.85) : (wx.length ? 0.7 : Math.min(0.25, c.rain * 0.5));
+  const p = clamp(truth + gauss() * (100 - re) / 450, 0.05, 0.95);
   return Math.round(p * 20) * 5;
 };
 
 /* ---------- qualifying ---------- */
-PW.runQualifying = function (mode, wet, setup) {
+PW.runQualifying = function (mode, wet, setup, bonus) {
+  bonus = bonus || {};
   const S = PW.state(), c = PW.circuit();
   const entries = [];
   Object.values(S.teams).forEach(team => {
@@ -56,7 +60,7 @@ PW.runQualifying = function (mode, wet, setup) {
       if (!d) return;
       const perf = PW.setupPerf(team, c, team.player ? setup : PW.idealSetup(c));
       let t = c.base + (100 - perf) * 0.065 + (100 - d.pace) * 0.045 + PW.TYRES.S.pace + gauss() * (0.42 - d.consistency * 0.0035);
-      if (team.player) { t -= (S.staff.re.rating - 50) * 0.004; t += (60 - d.morale) * 0.006; if (mode === "max") t -= 0.25; }
+      if (team.player) { t -= (S.staff.re.rating - 50) * 0.004; t += (60 - d.morale) * 0.006; if (mode === "max") t -= 0.25; t -= (bonus.quali || 0) + (bonus.perf || 0) * 0.065; }
       if (wet) t += 6 + (100 - d.wet) * 0.06 + Math.abs(gauss()) * 0.4;
       entries.push({ id: d.id, code: d.code, name: d.name, team: team.id, color: team.color, time: t, mine: !!team.player });
     });
@@ -66,7 +70,7 @@ PW.runQualifying = function (mode, wet, setup) {
 };
 
 /* ---------- strategy presets ---------- */
-PW.strategyPresets = function (wetStart) {
+PW.strategyPresets = function (wetStart, exact) {
   const S = PW.state(), c = PW.circuit(), L = c.laps, tr = S.teams.you.car.tyre;
   if (wetStart) return [{ id: "wet", name: "Start on wets", stints: ["W"], stops: [], est: 0, note: "Track is wet. React to the weather with the Box button." }];
   const life = t => lifeOf(t, c, tr);
@@ -92,7 +96,7 @@ PW.strategyPresets = function (wetStart) {
   const out = plans.slice(0, 4);
   // the race engineer recommends one; a weak engineer can misjudge
   const re = S.staff.re.rating;
-  const scored = out.map(p => ({ p, s: p.est + gauss() * (100 - re) * 0.25 })).sort((a, b) => a.s - b.s);
+  const scored = out.map(p => ({ p, s: p.est + (exact ? 0 : gauss() * (100 - re) * 0.25) })).sort((a, b) => a.s - b.s);
   if (scored[0]) scored[0].p.recommended = true;
   const best = out[0] ? out[0].est : 0;
   out.forEach(p => p.delta = p.est - best);
@@ -100,7 +104,8 @@ PW.strategyPresets = function (wetStart) {
 };
 
 /* ---------- race setup ---------- */
-PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx) {
+PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus) {
+  bonus = bonus || {};
   const S = PW.state(), c = PW.circuit();
   const R = {
     c, path: PW.trackPath(c.shape), laps: c.laps, wet: !!wetStart, everWet: !!wetStart,
@@ -121,10 +126,11 @@ PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx) {
       tyre: start, used: [start], age: 0, wear: 0, stops: 0, pitTimer: 0, pitReq: null,
       plan: plan ? plan.stops.map(s => ({ ...s })) : [], mode: "normal", grid: i + 1,
       dnf: null, finished: false, finishT: 0, penalty: 0, aiThresh: rand(0.78, 0.98), strain: g.mine && qualiMode === "max" ? 1.3 : 1,
-      moraleDelta: 0, pos: i + 1, startPos: i + 1,
+      moraleDelta: 0, pos: i + 1, startPos: i + 1, ers: 100, boost: false,
+      wearMul: team.player ? (bonus.wearMul || 1) : 1, failMul: team.player ? (bonus.failMul || 1) : 1, perfBonus: team.player ? (bonus.perf || 0) : 0,
     };
   });
-  R.cars.forEach(car => car.lapTime = lapTimeFor(R, car) + 3 + car.grid * 0.05);
+  R.cars.forEach(car => { car.perf += car.perfBonus; car.lapTime = lapTimeFor(R, car) + 3 + car.grid * 0.05; });
   R.lapPos.push(Object.fromEntries(R.cars.map((car, i) => [car.id, i + 1])));
   return R;
 };
@@ -156,7 +162,7 @@ function wearPerLap(R, car) {
   if (car.tyre === "W" && !R.wet) w *= 3;
   if (car.tyre !== "W" && R.wet) w *= 0.6;
   if (R.sc) w *= 0.3;
-  return w * PW.SETUPS[car.setup || "bal"].wear;
+  return w * PW.SETUPS[car.setup || "bal"].wear * (car.wearMul || 1);
 }
 function pitLoss(car) {
   let stop = 2.1 + (100 - car.pit) * 0.022 + Math.abs(gauss()) * 0.35, fumble = "";
@@ -242,7 +248,7 @@ function onCross(R, car) {
   }
 
   // failures and crashes
-  const fail = (100 - car.rel) * 0.00007 * (car.mode === "push" ? 1.6 : 1) * car.strain;
+  const fail = (100 - car.rel) * 0.00007 * (car.mode === "push" ? 1.6 : 1) * car.strain * (car.failMul || 1);
   const crash = 0.0004 + (100 - car.d.consistency) * 0.00002 + (R.wet ? (car.tyre === "W" ? 0.0015 : 0.012) : 0) + (car.mode === "push" ? 0.0015 : 0) + (car.wear > 1.1 ? 0.02 : 0);
   if (Math.random() < fail) {
     car.dnf = pick(["Engine", "Gearbox", "Hydraulics", "Power unit", "Brakes", "Electrics"]);
@@ -351,8 +357,11 @@ PW.stepRace = function (R, dt) {
   const live = R.cars.filter(c => !c.dnf && !c.finished);
   // move
   live.forEach(car => {
-    if (car.pitTimer > 0) { car.pitTimer -= dt; return; }
-    car.dist += dt / car.lapTime;
+    if (car.pitTimer > 0) { car.pitTimer -= dt; car.boost = false; car.ers = Math.min(100, car.ers + dt * 30 / car.lapTime); return; }
+    if (R.sc) car.boost = false;
+    if (car.boost) { car.ers -= dt * BOOST_DRAIN / car.lapTime; if (car.ers <= 0) { car.ers = 0; car.boost = false; if (car.mine) radio(R, `${car.code}: battery is empty. Boost off.`, "", car); } }
+    else car.ers = Math.min(100, car.ers + dt * (car.mode === "save" ? 22 : car.mode === "push" ? 7 : 12) / car.lapTime);
+    car.dist += dt / car.lapTime * (car.boost ? BOOST_SPEED : 1);
   });
   // following, overtaking, safety-car bunching
   const order = live.slice().sort((a, b) => b.dist - a.dist);
@@ -360,14 +369,20 @@ PW.stepRace = function (R, dt) {
     const car = order[i], ahead = order[i - 1];
     if (car.pitTimer > 0 || ahead.pitTimer > 0) continue;
     const gapS = (ahead.dist - car.dist) * car.lapTime;
+    // rivals use their battery to attack and defend
+    if (!R.sc) {
+      if (!car.mine) { if (!car.boost && gapS < 0.9 && car.ers > 40 && car.lapTime < ahead.lapTime + 0.35) car.boost = true; else if (car.boost && (gapS > 1.6 || car.ers < 8)) car.boost = false; }
+      if (!ahead.mine) { if (!ahead.boost && gapS < 0.45 && ahead.ers > 55 && Math.random() < 0.02) ahead.boost = true; }
+    }
     if (R.sc) {
       if (gapS > 1.2) car.dist += dt / car.lapTime * 0.6; // catch up to the queue
       if (gapS < 0.6) car.dist = ahead.dist - 0.6 / car.lapTime;
       continue;
     }
-    if (gapS < 0.55 && car.lapTime < ahead.lapTime) {
-      const delta = ahead.lapTime - car.lapTime;
-      const pLap = R.c.pass * clamp(0.06 + delta * 0.45, 0, 0.9) * clamp(0.85 + (car.d.racecraft - ahead.d.racecraft) / 60, 0.4, 1.4) * PW.SETUPS[car.setup].pass / PW.SETUPS[ahead.setup].defend;
+    const effCar = car.lapTime / (car.boost ? BOOST_SPEED : 1), effAhead = ahead.lapTime / (ahead.boost ? BOOST_SPEED : 1);
+    if (gapS < 0.55 && effCar < effAhead) {
+      const delta = effAhead - effCar;
+      const pLap = R.c.pass * clamp(0.06 + delta * 0.45, 0, 0.9) * clamp(0.85 + (car.d.racecraft - ahead.d.racecraft) / 60, 0.4, 1.4) * PW.SETUPS[car.setup].pass / PW.SETUPS[ahead.setup].defend * (car.boost ? 1.5 : 1) / (ahead.boost ? 1.35 : 1);
       if (Math.random() < pLap / car.lapTime * dt * 2.2) {
         car.dist = ahead.dist + 0.0012; ahead.dist -= 0.0006;
         R.flash[car.id] = R.t;
@@ -419,6 +434,10 @@ PW.raceResult = function (R) {
 PW.boxCar = (R, car, tyre) => { car.pitReq = tyre; radio(R, `${car.code}: box, box. ${PW.TYRES[tyre].name}s ready.`, "", car); };
 PW.cancelBox = (R, car) => { car.pitReq = null; radio(R, `${car.code}: stay out, stay out.`, "", car); };
 PW.setMode = (R, car, m) => { car.mode = m; car.lapTime = lapTimeFor(R, car); };
+PW.setBoost = (R, car, on) => {
+  if (on && (R.sc || car.ers < 5 || car.pitTimer > 0)) return false;
+  car.boost = !!on; return true;
+};
 PW.canSwap = R => {
   const mine = R.cars.filter(c => c.mine && !c.dnf && !c.finished && c.pitTimer <= 0);
   if (mine.length < 2) return null;

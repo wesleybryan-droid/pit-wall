@@ -37,6 +37,7 @@ PW.newCareer = function (teamName, color) {
     research: { active: [], tier: Object.fromEntries(PW.AREAS.map(a => [a.id, 0])) },
     sponsors: [], sponsorOffers: [], staffMarket: null, mods: { wearMul: 1, capCut: 0, aiDev: 1 }, ruleNote: "",
     news: [], lastResult: null, history: [], over: false, phase: "hq",
+    board: { target: 9, conf: 60 }, trophies: {},
   };
   // two starter sponsors so the first races pay something
   S.sponsors.push(makeSponsor(0.9), makeSponsor(0.7));
@@ -52,7 +53,8 @@ PW.news = news;
 
 /* ---------- save / load ---------- */
 PW.save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} };
-PW.load = () => { try { const t = localStorage.getItem(SAVE_KEY); if (t) { S = JSON.parse(t); return S; } } catch (e) {} return null; };
+PW.load = () => { try { const t = localStorage.getItem(SAVE_KEY); if (t) { S = JSON.parse(t); upgradeSave(); return S; } } catch (e) {} return null; };
+function upgradeSave() { if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
 PW.wipe = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = null; };
 
 /* ---------- lookups ---------- */
@@ -271,6 +273,7 @@ PW.applyRace = function (res) {
   if (res.damageCost) lines.push(["Crash repairs", -res.damageCost]);
   lines.forEach(([k, v]) => { S.cash += v; report.finances.push([k, +v.toFixed(2)]); });
   report.net = +lines.reduce((a, l) => a + l[1], 0).toFixed(2);
+  report.trophies = raceTrophies(res);
   advanceResearch(report.research);
   rivalsDevelop();
   S.lastResult = { ...res, report }; delete S.lastResult.lapChart;
@@ -280,7 +283,7 @@ PW.applyRace = function (res) {
   S.round++;
   if (S.round === 6) ruleChange();
   if (S.round % 3 === 0) refreshSponsorOffers();
-  if (S.cash < -10) { S.over = true; news("The bank has called in the loans. The team is in administration.", "bad"); }
+  if (S.cash < -10) { S.over = true; S.overReason = "money"; news("The bank has called in the loans. The team is in administration.", "bad"); }
   S.phase = S.round >= PW.CIRCUITS.length ? "seasonEnd" : "hq";
   if (S.phase === "hq" && !S.over && Math.random() < 0.6) S.pendingEvent = rollEvent();
   PW.save();
@@ -290,6 +293,53 @@ function achieve(s, report) {
   s.done = true; S.cash += s.bonus;
   news(`Sponsor goal hit: ${s.name} pays a ${PW.money(s.bonus)} bonus.`, "good");
   report.sponsor.push(`${s.name}: goal hit, +${PW.money(s.bonus)}`);
+}
+
+/* ---------- trophies ---------- */
+PW.TROPHIES = [
+  { id: "points",  icon: "🎯", name: "Off the mark",        desc: "Score your first points" },
+  { id: "both",    icon: "✌️", name: "Double points",       desc: "Both cars finish in the points" },
+  { id: "podium",  icon: "🥉", name: "Podium",              desc: "Finish in the top 3" },
+  { id: "win",     icon: "🏆", name: "Race winner",         desc: "Win a race" },
+  { id: "onetwo",  icon: "🥇", name: "One-two",             desc: "Your cars finish first and second" },
+  { id: "pole",    icon: "⏱️", name: "Pole position",       desc: "Qualify on pole" },
+  { id: "fastest", icon: "💜", name: "Fastest lap",         desc: "Set the fastest lap of a race" },
+  { id: "rain",    icon: "🌧️", name: "Rain master",         desc: "Win a race that had rain" },
+  { id: "charge",  icon: "🚀", name: "From the back",       desc: "Win from 10th on the grid or lower" },
+  { id: "monaco",  icon: "⚓", name: "Jewel in the crown",  desc: "Win at Monaco" },
+  { id: "perfect", icon: "💎", name: "Perfect weekend",     desc: "Pole, win and fastest lap at the same race" },
+  { id: "board",   icon: "📈", name: "Board pleaser",       desc: "Hit the board's season target" },
+  { id: "cons",    icon: "👑", name: "Constructors' champions", desc: "Win the constructors' championship" },
+  { id: "drivers", icon: "🏁", name: "Drivers' champion",   desc: "One of your drivers wins the title" },
+];
+function award(id) {
+  if (!S.trophies) S.trophies = {};
+  if (S.trophies[id]) return null;
+  const t = PW.TROPHIES.find(x => x.id === id);
+  S.trophies[id] = { season: S.season, round: S.round };
+  news(`🏆 Trophy unlocked: ${t.name}. ${t.desc}.`, "good");
+  return t;
+}
+PW.award = id => { const t = award(id); PW.save(); return t; };
+function raceTrophies(res) {
+  const got = [];
+  const mine = res.classified.map((e, i) => ({ ...e, pos: i + 1 })).filter(e => e.team === "you" && !e.dnf);
+  const add = id => { const t = award(id); if (t) got.push(t); };
+  const best = mine.length ? Math.min(...mine.map(e => e.pos)) : 99;
+  const winner = mine.find(e => e.pos === 1);
+  if (best <= 10) add("points");
+  if (mine.length === 2 && mine.every(e => e.pos <= 10)) add("both");
+  if (best <= 3) add("podium");
+  if (winner) add("win");
+  if (mine.length === 2 && mine.every(e => e.pos <= 2)) add("onetwo");
+  if (res.pole) add("pole");
+  const fl = res.fastest && res.fastest.team === "you";
+  if (fl) add("fastest");
+  if (winner && res.wet) add("rain");
+  if (winner && winner.grid >= 10) add("charge");
+  if (winner && PW.circuit().name === "Monaco") add("monaco");
+  if (winner && res.pole && fl && res.poleId === winner.id && res.fastest.code === winner.code) add("perfect");
+  return got;
 }
 
 /* ---------- paddock events (decisions between races) ---------- */
@@ -433,11 +483,20 @@ PW.seasonSummary = function () {
   });
   const champ = PW.driverStandings()[0];
   const expiring = S.drivers.filter(d => d.team === "you" && d.contract <= 1);
-  return { st, pos, prize, beat, champ, expiring };
+  const b = S.board || { target: 9, conf: 60 };
+  const met = pos <= b.target, miss = pos - b.target;
+  const confDelta = met ? 20 : miss >= 3 ? -35 : -15;
+  const board = { target: b.target, met, bonus: met ? 8 : 0, confBefore: b.conf, conf: clamp(b.conf + confDelta, 0, 100), fired: !met && b.conf + confDelta <= 0, next: clamp(met ? pos - 2 : pos - 1, 1, 9) };
+  return { st, pos, prize, beat, champ, expiring, board };
 };
 PW.finishSeason = function (renew) {
   const sum = PW.seasonSummary();
-  S.cash += sum.prize;
+  S.cash += sum.prize + sum.board.bonus;
+  if (sum.board.met) award("board");
+  if (sum.pos === 1) award("cons");
+  if (sum.champ && sum.champ.team === "you") award("drivers");
+  S.board = { target: sum.board.next, conf: sum.board.conf };
+  if (sum.board.fired) { S.over = true; S.overReason = "fired"; news("The board has lost confidence. You have been replaced as team principal.", "bad"); PW.save(); return; }
   sum.beat.forEach(b => { if (b.ok) { S.cash += b.s.bonus; } });
   S.history.push({ season: S.season, final: sum.pos, points: S.teams.you.points });
   // contracts and ageing

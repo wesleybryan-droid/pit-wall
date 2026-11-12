@@ -83,13 +83,21 @@ function renderTitle() {
   </div></div>`;
 }
 
+function trophyShelf(compact) {
+  const s = S(), have = s.trophies || {};
+  const n = Object.keys(have).length;
+  return `<div class="${compact ? "" : "card"}" style="${compact ? "margin:16px 0" : "margin-top:16px"}"><h3>Trophy cabinet · ${n} of ${PW.TROPHIES.length}</h3><div class="trophies">${PW.TROPHIES.map(t => { const h = have[t.id]; return `<div class="trophy ${h ? "got" : ""}" title="${esc(t.desc)}"><div class="ti">${h ? t.icon : "🔒"}</div><b>${esc(t.name)}</b><span>${h ? `Season ${h.season}, round ${h.round + 1}` : esc(t.desc)}</span></div>`; }).join("")}</div></div>`;
+}
 function renderGameOver() {
   const s = S();
   app.innerHTML = `<div class="title"><div class="box card">
     <div class="pill red">Game over</div>
-    <h1 style="font-size:44px;margin-top:10px">In administration</h1>
+    ${s.overReason === "fired" ? `<h1 style="font-size:44px;margin-top:10px">You're fired</h1>
+    <p>After season ${s.season}, the board of ${esc(s.teams.you.name)} lost confidence and replaced you as team principal.</p>
+    <p class="muted">Tip: the board sets a target finishing position each season (shown on HQ). Missing it badly drains their confidence fast.</p>` : `<h1 style="font-size:44px;margin-top:10px">In administration</h1>
     <p>${esc(s.teams.you.name)} ran out of money in season ${s.season}, round ${s.round}. The bank has taken the keys to the factory.</p>
-    <p class="muted">Tip: keep an eye on the net per race on the HQ page. Salaries and research add up fast.</p>
+    <p class="muted">Tip: keep an eye on the net per race on the HQ page. Salaries and research add up fast.</p>`}
+    ${trophyShelf(true)}
     <button class="btn go" data-a="wipe">New career</button>
   </div></div>`;
 }
@@ -187,6 +195,8 @@ function pageHQ() {
         ${bar(s.devSpent, PW.devCap())}
         <hr>
         <div class="spread"><span>Drivers</span><span>${[d1, d2].map(d => `<b>${d.code}</b> <span class="muted">${d.points} pts</span>`).join(" · ")}</span></div>
+        <hr><div class="spread"><span>Board target</span><b class="${PW.myPos() <= s.board.target ? "good" : "warn"}">${ord(s.board.target)} or better · now ${ord(PW.myPos())}</b></div>
+        <div class="stat" style="grid-template-columns:110px 1fr 38px;margin-bottom:0"><span class="muted">Board confidence</span>${bar(s.board.conf, 100, s.board.conf < 35 ? "lowconf" : "")}<b class="num ${s.board.conf < 35 ? "bad" : ""}">${s.board.conf}</b></div>
         ${s.ruleNote ? `<hr><div class="warn" style="font-size:13px">⚠ ${esc(s.ruleNote)}</div>` : ""}
       </div>
       ${lr ? `<div class="card"><h3>Last race: ${esc(lr.report.circuit)}</h3>${lr.classified.map((e, i) => ({ e, i })).filter(x => x.e.mine).map(({ e, i }) => `<div class="spread"><b>${e.name}</b><span class="${e.dnf ? "dnf" : i < 10 ? "good" : ""}">${e.dnf ? "DNF " + e.dnf : "P" + (i + 1)}${e.pts ? ` · +${e.pts} pts` : ""}</span></div>`).join("")}<div class="muted" style="font-size:13px;margin-top:6px">Net money ${M(lr.report.net)}</div></div>` : ""}
@@ -298,14 +308,14 @@ function pageStandings() {
   const cal = PW.CIRCUITS.map((c, i) => { const h = s.history.find(x => x.season === s.season && x.round === i); return `<tr class="${i === s.round ? "me" : ""}"><td>${i + 1}</td><td>${esc(c.name)}</td><td class="muted">${esc(c.tag)}</td><td>${h ? h.mine.map(m => `${m.code} ${m.dnf ? '<span class="dnf">DNF</span>' : "P" + m.pos}`).join(" · ") : i === s.round ? '<span class="pill red">Next</span>' : ""}</td></tr>`; }).join("");
   return `<div class="grid g2"><div class="card"><h3>Constructors</h3><table><thead><tr><th>#</th><th>Team</th><th>Pts</th><th>Car avg</th></tr></thead><tbody>${cons}</tbody></table></div>
     <div class="card"><h3>Drivers</h3><table><thead><tr><th>#</th><th>Driver</th><th>Team</th><th>Pts</th><th>W</th><th>Pod</th></tr></thead><tbody>${drv}</tbody></table></div></div>
-    <div class="card" style="margin-top:16px;overflow-x:auto"><h3>Season ${s.season} calendar</h3><table><tbody>${cal}</tbody></table></div>`;
+    <div class="card" style="margin-top:16px;overflow-x:auto"><h3>Season ${s.season} calendar</h3><table><tbody>${cal}</tbody></table></div>${trophyShelf()}`;
 }
 
 /* ---------- race weekend ---------- */
 function startWeekend() {
   const c = PW.circuit();
   const wetStart = Math.random() < c.rain * 0.5, wx = PW.weatherPlan(c, wetStart);
-  W = { round: S().round, step: "quali", qualiMode: "std", wetStart, wx, outlook: PW.rainOutlook(wx, wetStart), advice: PW.setupAdvice(), gapMode: "leader", grid: null, plans: {}, presets: null };
+  W = { round: S().round, step: "practice", practice: [], bonus: {}, qualiMode: "std", wetStart, wx, outlook: PW.rainOutlook(wx, wetStart), advice: PW.setupAdvice(), gapMode: "leader", grid: null, plans: {}, presets: null };
   W.setup = W.advice;
   render();
 }
@@ -313,16 +323,47 @@ function weekendHeader(stepIdx) {
   const c = PW.circuit(W.round);
   return `<div class="top"><div class="topbar"><div class="logo"><div class="stripe"></div><div>${esc(c.name)}<small>Round ${W.round + 1} · ${esc(c.country)}</small></div></div>
     <div class="kpis"><span class="pill ${W.wetStart ? "blue" : ""}">${W.wetStart ? "🌧 Wet" : "☀ Dry"} · radar ${W.outlook}% rain</span><button class="iconbtn" data-a="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-a="guide" title="How to play">?</button></div></div></div>
-    <div class="page" style="padding-bottom:0"><div class="steps">${[0, 1, 2, 3].map(i => `<div class="${i <= stepIdx ? "on" : ""}"></div>`).join("")}</div></div>`;
+    <div class="page" style="padding-bottom:0"><div class="steps">${[0, 1, 2, 3, 4].map(i => `<div class="${i <= stepIdx ? "on" : ""}"></div>`).join("")}</div></div>`;
+}
+const PRACTICE = [
+  { id: "setup", icon: "🔧", name: "Setup work", desc: "Find the exact best setup (your engineer's pick is guaranteed right) and +0.3 car performance this weekend." },
+  { id: "long",  icon: "🛞", name: "Tire long runs", desc: "Exact tire-life data, a perfect strategy recommendation, and 6% less tire wear in the race." },
+  { id: "quali", icon: "⏱️", name: "Qualifying simulations", desc: "Practice low-fuel laps. About 0.2s faster in qualifying." },
+  { id: "rel",   icon: "🔩", name: "Reliability checks", desc: "Strip and inspect the cars. 40% fewer breakdowns in the race." },
+];
+function practiceBonus(list) {
+  const b = {};
+  if (list.includes("setup")) b.perf = 0.3;
+  if (list.includes("long")) b.wearMul = 0.94;
+  if (list.includes("quali")) b.quali = 0.2;
+  if (list.includes("rel")) b.failMul = 0.6;
+  return b;
 }
 function renderWeekend() {
   PW.screen = W.step === "grid" ? "strategy" : W.step;
   if (W.step === "race") return renderRace();
   if (W.step === "results") return renderResults();
   const c = PW.circuit(), [d1, d2] = PW.myDrivers();
+  if (W.step === "practice") {
+    const progs = PRACTICE.map(p => `<button class="${W.practice.includes(p.id) ? "on" : ""}" data-a="prac" data-v="${p.id}"><div class="spread"><b>${p.icon} ${p.name}</b>${W.practice.includes(p.id) ? '<span class="pill green">Selected</span>' : ""}</div><span>${p.desc}</span></button>`).join("");
+    app.innerHTML = weekendHeader(0) + `<div class="page"><div class="grid g2">
+      <div class="card team"><h3>Friday practice</h3><h2 style="margin-bottom:6px">Choose two programs</h2>
+        <p class="muted">There's only time for two programs before qualifying. Pick the ones that fit this circuit and your plan.</p>
+        <div class="choice">${progs}</div>
+        <div style="margin-top:18px"><button class="btn go" data-a="pracdone" ${W.practice.length ? "" : "disabled"}>${W.practice.length < 2 ? `Pick ${2 - W.practice.length} more` : "Go to qualifying ›"}</button>
+        ${W.practice.length === 1 ? '<button class="btn ghost" data-a="pracdone" style="margin-left:6px">Skip the second</button>' : ""}</div></div>
+      <div class="card"><h3>About ${esc(c.name)}</h3><p>${esc(c.tag)}.</p>
+        <div class="traits">
+          <div class="trait"><span>Tire wear</span><b>${level(c.wear, .95, 1.12, ["Low", "Medium", "High"])}</b></div>
+          <div class="trait"><span>Overtaking</span><b>${level(c.pass, .7, 1.15, ["Hard", "Normal", "Easy"])}</b></div>
+          <div class="trait"><span>Radar</span><b class="${W.outlook >= 50 ? "warn" : ""}">${W.outlook}% rain</b></div>
+        </div>
+        <p class="muted" style="font-size:13px">Hard to pass here? Qualifying sims pay off. Tires wear fast? Long runs help. Weak reliability? Check it now rather than on Sunday.</p></div></div></div>`;
+    return;
+  }
   if (W.step === "quali") {
     const ideal = PW.SETUPS[W.advice];
-    app.innerHTML = weekendHeader(0) + `<div class="page"><div class="grid g2">
+    app.innerHTML = weekendHeader(1) + `<div class="page"><div class="grid g2">
       <div class="card team"><h3>Car setup</h3><h2 style="margin-bottom:6px">How much downforce?</h2>
         <p class="muted">${esc(c.name)} favors ${[["aero", c.aero], ["engine power", c.power], ["mechanical grip", c.mech]].sort((x, y) => y[1] - x[1])[0][0]}. The setup is used for qualifying and the race. Matching it to the circuit, and to your car's strengths, is worth real lap time.</p>
         <div class="choice">${Object.entries(PW.SETUPS).map(([k, st]) => `<button class="${W.setup === k ? "on" : ""}" data-a="setup" data-v="${k}"><div class="spread"><b>${st.name}</b>${W.advice === k ? '<span class="pill green">Engineer\'s pick</span>' : ""}</div><span>${st.desc}</span></button>`).join("")}</div>
@@ -344,7 +385,7 @@ function renderWeekend() {
     return;
   }
   if (W.step === "grid" || W.step === "strategy") {
-    if (!W.presets) W.presets = PW.strategyPresets(W.wetStart);
+    if (!W.presets) W.presets = PW.strategyPresets(W.wetStart, W.practice.includes("long"));
     [d1, d2].forEach(d => { if (!W.plans[d.id]) W.plans[d.id] = (W.presets.find(p => p.recommended) || W.presets[0]); });
     const gridHtml = W.grid.map((g, i) => `<div class="gslot ${g.mine ? "me" : ""} ${W.animGrid ? "anim" : ""}" style="animation-delay:${i * 70}ms"><span class="p">${i + 1}</span><span class="sw" style="background:${g.color}"></span><b>${g.code}</b><span class="muted">${esc(S().teams[g.team].short)}</span><span class="t num">${i === 0 ? g.time.toFixed(3) : "+" + (g.time - W.grid[0].time).toFixed(3)}</span></div>`).join("");
     W.animGrid = false;
@@ -355,10 +396,11 @@ function renderWeekend() {
           <div class="row" style="gap:6px">${p.stints.map(tyre).join('<span class="dim">›</span>')}${p.recommended ? '<span class="pill green" style="margin-left:auto">Engineer\'s pick</span>' : ""}</div>
           <b style="margin-top:6px">${p.name}</b><span>${p.stops.length ? "Box on lap " + p.stops.map(s => s.lap).join(" and ") : esc(p.note || "")}${p.delta > 0.05 ? ` · est. +${p.delta.toFixed(1)}s` : p.stops.length ? " · fastest on paper" : ""}</span></button>`).join("")}</div></div>`;
     };
-    app.innerHTML = weekendHeader(W.step === "grid" ? 1 : 2) + `<div class="page"><div class="grid g2">
+    app.innerHTML = weekendHeader(2) + `<div class="page"><div class="grid g2">
       <div class="card"><h3>Starting grid</h3><div class="gridlist">${gridHtml}</div></div>
       <div class="grid" style="align-content:start">
         <div class="card"><h3>Race strategy</h3><p class="muted" style="margin:0">Pick a plan for each car. In a dry race you must use two different dry compounds or take a 20s penalty. You can change everything live from the pit wall.</p>
+          ${W.practice.includes("long") && !W.wetStart ? `<p style="margin:8px 0 0;font-size:13px">Long-run data: ${["S", "M", "H"].map(t => `${tyre(t)} about ${Math.round(PW.TYRES[t].life / (c.wear * S().mods.wearMul) * (0.8 + S().teams.you.car.tyre / 300) / ((W.bonus.wearMul || 1) * PW.SETUPS[W.setup].wear))} laps`).join(" · ")}</p>` : ""}
           <p style="margin:8px 0 0;font-size:13px">Setup: <b>${PW.SETUPS[W.setup].name}</b> · Radar: <b class="${W.outlook >= 50 ? "warn" : ""}">${W.outlook}% ${W.wetStart ? "chance it stays wet" : "chance of rain"}</b></p></div>
         ${stratCard(d1)}${stratCard(d2)}
         <button class="btn go" data-a="lightsout">Lights out ›</button>
@@ -430,7 +472,7 @@ function updateRaceDom(full) {
   ["pause", 1, 2, 4, 8].forEach(v => { const b = document.getElementById("sp-" + v); if (b) b.classList.toggle("on", v === "pause" ? R.paused : (!R.paused && R.speed === v)); });
   set("tower", order.map((car, i) => {
     const fl = R.flash[car.id] && R.t - R.flash[car.id] < 3;
-    const st = car.dnf ? "OUT" : car.pitTimer > 0 ? "PIT" : car.finished ? "🏁" : "";
+    const st = car.dnf ? "OUT" : car.pitTimer > 0 ? "PIT" : car.finished ? "🏁" : car.boost ? "⚡" : "";
     return `<div class="trow ${car.mine ? "me" : ""} ${fl ? "flash" : ""} ${car.dnf ? "out" : ""}"><span class="p num">${i + 1}</span><span class="c" style="background:${car.color}"></span><span class="cd">${car.code}</span><span class="st">${st}</span><span class="g num">${W.gapMode === "interval" && i > 0 ? intervalText(R, car, order[i - 1], leader) : PW.gapText(R, car, leader)}</span>${car.dnf ? "<span></span>" : tyre(car.tyre)}</div>`;
   }).join(""));
   // my cars
@@ -443,6 +485,8 @@ function updateRaceDom(full) {
     return `<div class="carctl"><div class="head"><div class="pos num">${car.dnf ? "—" : "P" + car.pos}</div><div style="flex:1"><div class="nm">${esc(car.name)}</div><div class="sub num">${car.lastLap ? "Last " + car.lastLap.toFixed(2) + "s" : "Grid P" + car.startPos}${gapA != null && gapA > 0 && gapA < 60 && !car.finished ? ` · ${gapA.toFixed(1)}s to ${ahead.code}` : ""}</div></div>${car.dnf ? "" : tyre(car.tyre)}</div>
       ${car.dnf || car.finished ? `<div class="plan">${plan}</div>` : `
       <div class="wear"><span>Tires</span><div class="bar"><i style="width:${Math.max(0, 100 - wearPct)}%;background:${wearPct > 80 ? "var(--red)" : wearPct > 55 ? "var(--amber)" : "var(--green)"}"></i></div><span class="num">${Math.max(0, 100 - wearPct)}%</span></div>
+      <div class="ers"><span class="muted">⚡ Battery</span><div class="bar"><i style="width:${Math.round(car.ers)}%"></i></div><button class="btn sm boostbtn ${car.boost ? "on" : ""}" data-pd="boost" data-v="${car.id}" ${R.sc || car.pitTimer > 0 || (!car.boost && car.ers < 5) ? "disabled" : ""}>${car.boost ? "⚡ Boosting" : "⚡ Boost"}</button></div>
+      ${!car.boost && gapA != null && gapA > 0 && gapA < 1.0 && !R.sc ? `<div class="attack">Within 1s of ${ahead.code}. Boost to attack!</div>` : ""}
       <div class="seg">${["save", "normal", "push"].map(m => `<button class="${car.mode === m ? "on " + m : ""}" data-pd="mode" data-v="${car.id}" data-m="${m}">${m === "save" ? "Save tires" : m === "push" ? "Push" : "Balanced"}</button>`).join("")}</div>
       <div class="boxrow"><span class="muted" style="font-size:12px;margin-right:4px">BOX FOR</span>${["S", "M", "H", "W"].map(t => `<button class="tbtn ${car.pitReq === t ? "sel" : ""}" data-pd="box" data-v="${car.id}" data-t="${t}" title="${PW.TYRES[t].name}">${tyre(t)}</button>`).join("")}</div>
       <div class="plan">${plan}</div>`}</div>`;
@@ -477,6 +521,7 @@ function intervalText(R, car, ahead, leader) {
 }
 function finishRace() {
   const res = PW.raceResult(R);
+  res.pole = !!W.pole; res.poleId = W.pole;
   W.report = PW.applyRace(res);
   W.res = res;
   W.step = "results";
@@ -513,7 +558,7 @@ function renderResults() {
   const mine = res.classified.map((e, i) => ({ e, p: i + 1 })).filter(x => x.e.mine);
   const best = Math.min(...mine.map(x => x.e.dnf ? 99 : x.p));
   const headline = best === 1 ? "VICTORY!" : best <= 3 ? "PODIUM!" : best <= 10 ? "Points on the board" : mine.every(x => x.e.dnf) ? "Double DNF. Ouch." : "No points this time";
-  app.innerHTML = weekendHeader(3) + `<div class="page">
+  app.innerHTML = weekendHeader(4) + `<div class="page">
     <div class="card team" style="text-align:center"><div class="muted" style="text-transform:uppercase;letter-spacing:.14em;font-weight:700;font-size:12px">${esc(rep.circuit)} · Race result</div>
       <h1 class="bigh">${headline}</h1>
       <div class="muted">${mine.map(x => `${x.e.name}: ${x.e.dnf ? "DNF" : "P" + x.p}`).join(" · ")}${res.fastest ? ` · Fastest lap ${res.fastest.code} ${res.fastest.t.toFixed(2)}s` : ""}</div>
@@ -524,6 +569,7 @@ function renderResults() {
       <div class="card" style="overflow-x:auto"><h3>Classification</h3><table><thead><tr><th>#</th><th>Driver</th><th>Team</th><th>Gap</th><th>Grid</th><th>Stops</th><th>Pts</th></tr></thead><tbody>${rows}</tbody></table></div></div>
       <div class="grid" style="align-content:start">
         <div class="card"><h3>Money</h3>${rep.finances.map(([k, v]) => `<div class="spread"><span>${k}</span><b class="num ${v >= 0 ? "good" : "bad"}">${M(v)}</b></div>`).join("")}<hr><div class="spread"><b>Net</b><b class="num ${rep.net >= 0 ? "good" : "bad"}">${M(rep.net)}</b></div><div class="spread muted"><span>Cash now</span><span class="num">${M(s.cash)}</span></div></div>
+        ${rep.trophies && rep.trophies.length ? `<div class="card trophycard"><h3>Trophy unlocked!</h3>${rep.trophies.map(t => `<div class="spread" style="margin:6px 0"><span style="font-size:28px">${t.icon}</span><div style="flex:1"><b>${esc(t.name)}</b><div class="muted" style="font-size:12px">${esc(t.desc)}</div></div></div>`).join("")}</div>` : ""}
         ${rep.research.length ? `<div class="card"><h3>Factory</h3>${rep.research.map(r => `<div class="${r.kind}">${r.kind === "good" ? "✔" : "✖"} ${esc(r.text)}</div>`).join("")}</div>` : ""}
         ${rep.sponsor.length ? `<div class="card"><h3>Sponsors</h3>${rep.sponsor.map(x => `<div class="good">★ ${esc(x)}</div>`).join("")}</div>` : ""}
         <div class="card"><h3>Driver morale</h3>${rep.morale.map(m => `<div class="spread"><span>${esc(m.name)}</span><span class="num ${m.delta >= 0 ? "good" : "bad"}">${m.delta >= 0 ? "+" : ""}${m.delta} → ${m.morale}</span></div>`).join("")}</div>
@@ -542,6 +588,10 @@ function renderSeasonEnd() {
     <div class="grid g2" style="margin-top:16px">
       <div class="card"><h3>Final constructors' standings</h3><table><tbody>${sum.st.map((t, i) => `<tr class="${t.player ? "me" : ""}"><td>${i + 1}</td><td><span class="sw" style="background:${t.color}"></span>${esc(t.name)}</td><td class="num"><b>${t.points}</b></td><td class="num muted">${M(PW.PRIZE[i])}</td></tr>`).join("")}</tbody></table></div>
       <div class="grid" style="align-content:start">
+        <div class="card ${sum.board.met ? "" : "boardmiss"}"><h3>The board's verdict</h3>
+          <div class="spread"><span>Target: ${ord(sum.board.target)} or better</span><b class="${sum.board.met ? "good" : "bad"}">${sum.board.met ? "Target hit" : "Target missed"}</b></div>
+          <div class="stat" style="grid-template-columns:110px 1fr 70px"><span class="muted">Confidence</span>${bar(sum.board.conf, 100, sum.board.conf < 35 ? "lowconf" : "")}<b class="num ${sum.board.conf < sum.board.confBefore ? "bad" : "good"}">${sum.board.confBefore} → ${sum.board.conf}</b></div>
+          <p class="muted" style="font-size:13px;margin:6px 0 0">${sum.board.fired ? "<b class='bad'>The board has run out of patience. Starting next season will end your career.</b>" : sum.board.met ? `Bonus budget of ${M(sum.board.bonus)} approved. Next season's target: ${ord(sum.board.next)} or better.` : `No bonus. Next season's target: ${ord(sum.board.next)} or better. Don't miss again.`}</p></div>
         <div class="card"><h3>Payouts</h3><div class="spread"><span>Prize money (${ord(sum.pos)})</span><b class="good num">${M(sum.prize)}</b></div>
           ${sum.beat.map(b => `<div class="spread"><span>${esc(b.s.name)}: ${esc(b.s.goal.text)}</span><b class="${b.ok ? "good" : "bad"}">${b.ok ? "+" + M(b.s.bonus) : "Missed"}</b></div>`).join("")}</div>
         <div class="card"><h3>Expiring contracts</h3>${sum.expiring.length ? sum.expiring.map(d => `<label class="spread" style="margin:8px 0;cursor:pointer"><span><input type="checkbox" class="renew" value="${d.id}" checked> Renew <b>${esc(d.name)}</b> (${d.role === "res" ? "reserve" : "race seat"}, OVR ${PW.ovr(d)}, age ${d.age})</span><span class="num muted">${M(PW.driverSalary(d))}/season</span></label>`).join("") : `<p class="muted">Everyone is under contract for next season.</p>`}
@@ -576,9 +626,15 @@ app.addEventListener("click", e => {
     case "weekend": Snd.click(); startWeekend(); window.scrollTo(0, 0); break;
     case "qmode": W.qualiMode = v; Snd.click(); render(); break;
     case "setup": W.setup = v; Snd.click(); render(); break;
-    case "runquali": W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup); W.step = "grid"; W.animGrid = true; Snd.go(); render(); break;
+    case "prac": { const i = W.practice.indexOf(v); if (i >= 0) W.practice.splice(i, 1); else if (W.practice.length < 2) W.practice.push(v); else { W.practice.shift(); W.practice.push(v); } Snd.click(); render(); break; }
+    case "pracdone": {
+      W.bonus = practiceBonus(W.practice);
+      if (W.practice.includes("setup")) { const st = S(), cc = PW.circuit(); W.advice = Object.keys(PW.SETUPS).sort((a, b) => PW.setupPerf(st.teams.you, cc, b) - PW.setupPerf(st.teams.you, cc, a))[0]; W.setup = W.advice; }
+      W.step = "quali"; Snd.click(); render(); window.scrollTo(0, 0); break;
+    }
+    case "runquali": W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup, W.bonus); W.pole = W.grid[0].mine ? W.grid[0].id : null; if (W.pole) toast("⏱️ Pole position!"); W.step = "grid"; W.animGrid = true; Snd.go(); render(); break;
     case "plan": W.plans[v] = W.presets.find(p => p.id === el.dataset.p); Snd.click(); render(); break;
-    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx); R.autoPause = autoPausePref(); W.step = "race"; window.scrollTo(0, 0); render(); break;
+    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx, W.bonus); R.autoPause = autoPausePref(); W.step = "race"; window.scrollTo(0, 0); render(); break;
     case "leave": W = null; tab = "hq"; render(); window.scrollTo(0, 0); break;
     case "nextseason": { const renew = [...document.querySelectorAll(".renew:checked")].map(x => x.value); PW.finishSeason(renew); tab = "hq"; render(); window.scrollTo(0, 0); break; }
   }
@@ -593,6 +649,7 @@ app.addEventListener("pointerdown", e => {
     case "gapmode": W.gapMode = W.gapMode === "leader" ? "interval" : "leader"; updateRaceDom(true); return;
     case "speed": if (v === "pause") R.paused = !R.paused; else { R.speed = +v; R.paused = false; } if (!R.paused) R.decision = null; break;
     case "dresume": R.decision = null; R.paused = false; break;
+    case "boost": PW.setBoost(R, car, !car.boost); break;
     case "autopause": R.autoPause = !R.autoPause; try { localStorage.setItem("pitwall-autopause", R.autoPause ? "on" : "off"); } catch (e) {} if (!R.autoPause && R.decision) { R.decision = null; R.paused = false; } break;
     case "simend": if (!R.started) return; PW.runToEnd(R); break;
     case "sound": Snd.toggle(); if (Snd.on && R.started && !R.finished) Snd.humStart(); el.textContent = Snd.on ? "🔊" : "🔇"; break;
