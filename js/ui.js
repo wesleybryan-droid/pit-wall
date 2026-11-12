@@ -318,7 +318,7 @@ function pageStandings() {
 function startWeekend() {
   const c = PW.circuit();
   const wetStart = Math.random() < c.rain * 0.5, wx = PW.weatherPlan(c, wetStart);
-  W = { round: S().round, step: "practice", practice: [], bonus: {}, qualiMode: "std", wetStart, wx, outlook: PW.rainOutlook(wx, wetStart), advice: PW.setupAdvice(), gapMode: "leader", grid: null, plans: {}, presets: null };
+  W = { round: S().round, fuel: "std", step: "practice", practice: [], bonus: {}, qualiMode: "std", wetStart, wx, outlook: PW.rainOutlook(wx, wetStart), advice: PW.setupAdvice(), gapMode: "leader", grid: null, plans: {}, presets: null };
   W.setup = W.advice;
   render();
 }
@@ -406,6 +406,9 @@ function renderWeekend() {
           ${W.practice.includes("long") && !W.wetStart ? `<p style="margin:8px 0 0;font-size:13px">Long-run data: ${["S", "M", "H"].map(t => `${tyre(t)} about ${Math.round(PW.TYRES[t].life / (c.wear * S().mods.wearMul) * (0.8 + S().teams.you.car.tyre / 300) / ((W.bonus.wearMul || 1) * PW.SETUPS[W.setup].wear))} laps`).join(" · ")}</p>` : ""}
           <p style="margin:8px 0 0;font-size:13px">Setup: <b>${PW.SETUPS[W.setup].name}</b> · Radar: <b class="${W.outlook >= 50 ? "warn" : ""}">${W.outlook}% ${W.wetStart ? "chance it stays wet" : "chance of rain"}</b></p></div>
         ${stratCard(d1)}${stratCard(d2)}
+        <div class="card"><h3>Fuel load (both cars)</h3><div class="choice">
+          ${[["light", "Light", "Starts 0.4 laps short. Faster early on with less weight, but you'll have to save fuel for a few laps or run dry."], ["std", "Standard", "Almost half a lap spare. Normal racing, with a little saving if you push and boost a lot."], ["heavy", "Heavy", "A full lap spare. Push and boost freely, but the extra weight costs time early on."]].map(([k, n, d]) => `<button class="${W.fuel === k ? "on" : ""}" data-a="fuel" data-v="${k}"><div class="spread"><b>${n}</b>${k === "std" ? '<span class="pill green">Engineer\'s pick</span>' : ""}</div><span>${d}</span></button>`).join("")}
+        </div></div>
         <button class="btn go" data-a="lightsout">Lights out ›</button>
       </div></div></div>`;
   }
@@ -488,6 +491,7 @@ function updateRaceDom(full) {
     return `<div class="carctl"><div class="head">${face(car.d, 44)}<div class="pos num">${car.dnf ? "—" : "P" + car.pos}</div><div style="flex:1"><div class="nm">${esc(car.name)}</div><div class="sub num">${car.lastLap ? "Last " + car.lastLap.toFixed(2) + "s" : "Grid P" + car.startPos}${gapA != null && gapA > 0 && gapA < 60 && !car.finished ? ` · ${gapA.toFixed(1)}s to ${ahead.code}` : ""}</div></div>${car.dnf ? "" : tyre(car.tyre)}</div>
       ${car.dnf || car.finished ? `<div class="plan">${plan}</div>` : `
       <div class="wear"><span>Tires</span><div class="bar"><i style="width:${Math.max(0, 100 - wearPct)}%;background:${wearPct > 80 ? "var(--red)" : wearPct > 55 ? "var(--amber)" : "var(--green)"}"></i></div><span class="num">${Math.max(0, 100 - wearPct)}%</span></div>
+      ${telePanel(car, order)}
       <div class="ers"><span class="muted">⚡ Battery</span><div class="bar"><i style="width:${Math.round(car.ers)}%"></i></div><button class="btn sm boostbtn ${car.boost ? "on" : ""}" data-pd="boost" data-v="${car.id}" ${R.sc || car.pitTimer > 0 || (!car.boost && car.ers < 5) ? "disabled" : ""}>${car.boost ? "⚡ Boosting" : "⚡ Boost"}</button></div>
       ${!car.boost && gapA != null && gapA > 0 && gapA < 1.0 && !R.sc ? `<div class="attack">Within 1s of ${ahead.code}. Boost to attack!</div>` : ""}
       <div class="seg">${["save", "normal", "push"].map(m => `<button class="${car.mode === m ? "on " + m : ""}" data-pd="mode" data-v="${car.id}" data-m="${m}">${m === "save" ? "Save tires" : m === "push" ? "Push" : "Balanced"}</button>`).join("")}</div>
@@ -499,20 +503,51 @@ function updateRaceDom(full) {
 }
 PW.onRadio = (text, kind) => { Snd.radio(); };
 
+function teleCell(label, val, unit, cls, pct) {
+  return `<div class="tc ${cls}"><span>${label}</span><b class="num">${val}<small>${unit}</small></b><i style="width:${Math.max(4, Math.min(100, pct))}%"></i></div>`;
+}
+function trend(hist) {
+  const h = hist.filter(x => x != null); if (h.length < 2) return "";
+  const d = h[h.length - 1] - h[h.length - 2];
+  if (Math.abs(d) < 0.05) return '<span class="dim">steady</span>';
+  return d < 0 ? `<span class="tr-close">▼${Math.abs(d).toFixed(1)}/lap</span>` : `<span class="tr-open">▲${d.toFixed(1)}/lap</span>`;
+}
+function telePanel(car, order) {
+  const t = car.tel; if (!t) return "";
+  const T = Math.round(t.tyre), B = Math.round(t.brake), E = Math.round(t.engine), F = PW.fuelDelta(R, car);
+  const tc = T < 80 ? "cold" : T > 112 ? "bad" : T > 106 ? "warn" : T >= 94 ? "good" : "ok";
+  const bc = B > 915 ? "bad" : B > 860 ? "warn" : "good";
+  const ec = E > 121 ? "bad" : E > 115 ? "warn" : "good";
+  const fc = F < -0.25 ? "bad" : F < 0 ? "warn" : "good";
+  const ahead = order[car.pos - 2], behind = order[car.pos];
+  const aheadTxt = ahead && car.gapAheadS < 60 && !R.sc ? `<b>${ahead.code}</b> ${car.gapAheadS.toFixed(1)}s ${trend(t.aheadHist)}` : "—";
+  const behindTxt = behind && !behind.dnf && behind.gapAheadS < 60 && !R.sc ? `<b>${behind.code}</b> ${behind.gapAheadS.toFixed(1)}s ${trend(t.behindHist)}` : "—";
+  const pp = car.pitTimer > 0 ? null : PW.pitProjection(R, car);
+  return `<div class="tele">
+    ${teleCell("Tires", T, "°C", tc, (T - 60) / 0.7)}
+    ${teleCell("Brakes", B, "°C", bc, (B - 300) / 7)}
+    ${teleCell("Engine", E, "°C", ec, (E - 80) / 0.5)}
+    ${teleCell("Fuel", (F >= 0 ? "+" : "") + F.toFixed(1), " laps", fc, 50 + F * 30)}
+  </div>
+  <div class="gapline"><span>Ahead ${aheadTxt}</span><span>Behind ${behindTxt}</span></div>
+  ${pp ? `<div class="pitproj">Box now → rejoin <b>P${pp.pos}</b>${pp.ahead ? `, ${pp.gapAhead.toFixed(1)}s behind ${pp.ahead.code}` : " in the lead"}${pp.behind && pp.gapBehind < 1.5 ? `, ${pp.behind.code} ${pp.gapBehind.toFixed(1)}s behind` : ""}</div>` : ""}`;
+}
 function autoPausePref() { try { return localStorage.getItem("pitwall-autopause") !== "off"; } catch (e) { return true; } }
 function decisionCard() {
   const d = R.decision;
   if (!d) return "";
-  const cars = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
+  const cars = R.cars.filter(c => c.mine && !c.dnf && !c.finished && (!d.car || c.id === d.car));
   const rows = cars.map(car => {
     const grip = Math.max(0, Math.round((1 - car.wear) * 100));
     return `<div class="drow"><div class="dcar"><b class="who">${face(car.d, 30)}P${car.pos} ${car.code}</b><span>${tyre(car.tyre)} ${grip}% grip${car.pitTimer > 0 ? " · in pits" : ""}</span></div>
       <div class="dbtns">${["S", "M", "H", "W"].map(t => `<button class="tbtn ${car.pitReq === t ? "sel" : ""} ${d.suggest[car.id] === t ? "sug" : ""}" data-pd="box" data-v="${car.id}" data-t="${t}" title="Box for ${PW.TYRES[t].name}s">${tyre(t)}</button>`).join("")}
       <button class="btn sm ${car.pitReq ? "" : "on"}" data-pd="cancelbox" data-v="${car.id}">Stay out</button></div>
-      <div class="dnote">${car.pitReq ? `<b class="warn">Boxing for ${PW.TYRES[car.pitReq].name}s at the end of this lap</b>` : d.suggest[car.id] ? `Engineer suggests: box for ${PW.TYRES[d.suggest[car.id]].name}s` : "Engineer: stay out"}</div></div>`;
+      ${d.mode ? `<div class="seg" style="margin-top:8px">${["save", "normal", "push"].map(m => `<button class="${car.mode === m ? "on " + m : ""} ${d.mode[car.id] === m ? "sugm" : ""}" data-pd="mode" data-v="${car.id}" data-m="${m}">${m === "save" ? "Save" : m === "push" ? "Push" : "Balanced"}</button>`).join("")}</div>` : ""}
+      ${car.tel ? `<div class="dtele">Tires ${Math.round(car.tel.tyre)}°C · Brakes ${Math.round(car.tel.brake)}°C · Engine ${Math.round(car.tel.engine)}°C · Fuel ${PW.fuelDelta(R, car) >= 0 ? "+" : ""}${PW.fuelDelta(R, car).toFixed(1)} laps</div>` : ""}
+      <div class="dnote">${car.pitReq ? `<b class="warn">Boxing for ${PW.TYRES[car.pitReq].name}s at the end of this lap</b>` : d.suggest[car.id] ? `Engineer suggests: box for ${PW.TYRES[d.suggest[car.id]].name}s` : d.mode && d.mode[car.id] ? `Engineer suggests: ${d.mode[car.id] === "save" ? "Save mode" : d.mode[car.id] === "push" ? "Push mode" : "Balanced"}` : "Engineer: stay out"}</div></div>`;
   }).join("");
   return `<div class="decision ${d.kind}"><div class="dtag">Decision · race paused</div><h4>${esc(d.title)}</h4><p>${esc(d.text)}</p>${rows}
-    <div class="dfoot"><button class="btn primary" data-pd="dresume">Keep racing ▶</button><span class="muted">Tap a tire to box for it.</span></div></div>`;
+    <div class="dfoot"><button class="btn primary" data-pd="dresume">Keep racing ▶</button><span class="muted">${d.mode ? "Change the mode, tap a tire to box, or both." : "Tap a tire to box for it."}</span></div></div>`;
 }
 function intervalText(R, car, ahead, leader) {
   if (car.dnf) return "OUT";
@@ -636,8 +671,9 @@ app.addEventListener("click", e => {
       W.step = "quali"; Snd.click(); render(); window.scrollTo(0, 0); break;
     }
     case "runquali": W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup, W.bonus); W.pole = W.grid[0].mine ? W.grid[0].id : null; if (W.pole) toast("⏱️ Pole position!"); W.step = "grid"; W.animGrid = true; Snd.go(); render(); break;
+    case "fuel": W.fuel = v; Snd.click(); render(); break;
     case "plan": W.plans[v] = W.presets.find(p => p.id === el.dataset.p); Snd.click(); render(); break;
-    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx, W.bonus); R.autoPause = autoPausePref(); W.step = "race"; window.scrollTo(0, 0); render(); break;
+    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx, W.bonus, W.fuel); R.autoPause = autoPausePref(); W.step = "race"; window.scrollTo(0, 0); render(); break;
     case "leave": W = null; tab = "hq"; render(); window.scrollTo(0, 0); break;
     case "nextseason": { const renew = [...document.querySelectorAll(".renew:checked")].map(x => x.value); PW.finishSeason(renew); tab = "hq"; render(); window.scrollTo(0, 0); break; }
   }

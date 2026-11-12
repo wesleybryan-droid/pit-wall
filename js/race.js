@@ -6,6 +6,9 @@ const { rand, clamp, gauss, pick } = PW;
 /* ---------- shared helpers ---------- */
 const BOOST_SPEED = 1.0075;  // about 0.65s a lap faster while boosting
 const BOOST_DRAIN = 42;      // % of battery used per lap of boosting
+// fuel load options for my cars: laps of fuel over (or under) what the race needs at normal use
+const FUEL_PLANS = { light: { margin: -0.4 }, std: { margin: 0.45 }, heavy: { margin: 1.1 } };
+PW.FUEL_PLANS = FUEL_PLANS;
 const pitRating = team => team.player ? PW.state().staff.pit.rating : Math.round(40 + PW.TEAMS.find(t => t.id === team.id).tier * 45);
 const lifeOf = (t, c, tyreRating) => PW.TYRES[t].life / (c.wear * PW.state().mods.wearMul) * (0.8 + (tyreRating || 65) / 300);
 
@@ -104,7 +107,7 @@ PW.strategyPresets = function (wetStart, exact) {
 };
 
 /* ---------- race setup ---------- */
-PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus) {
+PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus, fuel) {
   bonus = bonus || {};
   const S = PW.state(), c = PW.circuit();
   const R = {
@@ -126,7 +129,8 @@ PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus) {
       tyre: start, used: [start], age: 0, wear: 0, stops: 0, pitTimer: 0, pitReq: null,
       plan: plan ? plan.stops.map(s => ({ ...s })) : [], mode: "normal", grid: i + 1,
       dnf: null, finished: false, finishT: 0, penalty: 0, aiThresh: rand(0.78, 0.98), strain: g.mine && qualiMode === "max" ? 1.3 : 1,
-      moraleDelta: 0, pos: i + 1, startPos: i + 1, ers: 100, boost: false,
+      moraleDelta: 0, pos: i + 1, startPos: i + 1, ers: 100, boost: false, gapAheadS: 99,
+      tel: team.player ? { tyre: 84, brake: 520, engine: 96, fuel: c.laps + (FUEL_PLANS[fuel] || FUEL_PLANS.std).margin, aheadHist: [], behindHist: [], cd: {}, stuck: 0 } : null,
       wearMul: team.player ? (bonus.wearMul || 1) : 1, failMul: team.player ? (bonus.failMul || 1) : 1, perfBonus: team.player ? (bonus.perf || 0) : 0,
     };
   });
@@ -146,8 +150,14 @@ function lapTimeFor(R, car) {
   if (car.mine) { t -= (S.staff.re.rating - 50) * 0.004; t += (60 - d.morale) * 0.006; }
   t += PW.TYRES[car.tyre].pace;
   const w = car.wear; t += 2.6 * w * w + (w > 1 ? (w - 1) * 8 : 0);
-  t += 0.045 * Math.max(0, R.laps - Math.max(0, car.lapIdx));
-  if (car.mode === "push") t -= 0.38; else if (car.mode === "save") t += 0.45;
+  t += 0.045 * (car.tel ? Math.max(0, car.tel.fuel) : Math.max(0, R.laps - Math.max(0, car.lapIdx)));
+  if (car.tel) {
+    const T = car.tel.tyre, E = car.tel.engine;
+    if (T < 80) t += (80 - T) * 0.035; else if (T > 110) t += (T - 110) * 0.08; else if (T >= 94 && T <= 106) t -= 0.1;
+    if (E > 118) t += (E - 118) * 0.09;
+    if (car.tel.brake > 880) t += (car.tel.brake - 880) * 0.006; // brake fade
+  }
+  if (car.mode === "push") t -= 0.38; else if (car.mode === "save") t += 0.25;
   if (R.wet) { t += 6; t += car.tyre === "W" ? (100 - d.wet) * 0.05 : 7.5; }
   else if (car.tyre === "W") t += 4.2;
   t += gauss() * (0.42 - d.consistency * 0.0035);
@@ -162,7 +172,8 @@ function wearPerLap(R, car) {
   if (car.tyre === "W" && !R.wet) w *= 3;
   if (car.tyre !== "W" && R.wet) w *= 0.6;
   if (R.sc) w *= 0.3;
-  return w * PW.SETUPS[car.setup || "bal"].wear * (car.wearMul || 1);
+  const heat = car.tel && car.tel.tyre > 110 ? 1 + (car.tel.tyre - 110) * 0.05 : 1;
+  return w * PW.SETUPS[car.setup || "bal"].wear * (car.wearMul || 1) * heat;
 }
 function pitLoss(car) {
   let stop = 2.1 + (100 - car.pit) * 0.022 + Math.abs(gauss()) * 0.35, fumble = "";
@@ -183,11 +194,11 @@ function banner(R, text, kind) {
 PW.banner = banner;
 
 /* ---------- decision moments: pause so the player can make the call ---------- */
-function decide(R, kind, title, text, suggest) {
+function decide(R, kind, title, text, suggest, extra) {
   if (!R.autoPause || R.noPause || !R.started || R.decision || R.leaderDone) return;
   const mine = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
   if (!mine.length) return;
-  R.decision = { kind, title, text, suggest: suggest || {}, at: R.t };
+  R.decision = { kind, title, text, suggest: suggest || {}, mode: (extra && extra.mode) || null, car: (extra && extra.car) || null, at: R.t };
   R.paused = true;
 }
 function dryFor(R, car) { return bestDryFor(R, car, R.laps - Math.max(0, car.lapIdx)); }
@@ -248,10 +259,15 @@ function onCross(R, car) {
   }
 
   // failures and crashes
-  const fail = (100 - car.rel) * 0.00007 * (car.mode === "push" ? 1.6 : 1) * car.strain * (car.failMul || 1);
+  let fail = (100 - car.rel) * 0.00007 * (car.mode === "push" ? 1.6 : 1) * car.strain * (car.failMul || 1);
+  let failWhat = null;
+  if (car.tel) {
+    if (car.tel.brake > 950) { fail += (car.tel.brake - 950) * 0.0012; failWhat = "Brakes"; }
+    if (car.tel.engine > 125) { fail += (car.tel.engine - 125) * 0.0008; failWhat = "Engine overheating"; }
+  }
   const crash = 0.0004 + (100 - car.d.consistency) * 0.00002 + (R.wet ? (car.tyre === "W" ? 0.0015 : 0.012) : 0) + (car.mode === "push" ? 0.0015 : 0) + (car.wear > 1.1 ? 0.02 : 0);
   if (Math.random() < fail) {
-    car.dnf = pick(["Engine", "Gearbox", "Hydraulics", "Power unit", "Brakes", "Electrics"]);
+    car.dnf = failWhat || pick(["Engine", "Gearbox", "Hydraulics", "Power unit", "Brakes", "Electrics"]);
     radio(R, car.mine ? `${car.code}: we have a problem. ${car.dnf} failure. Stop the car.` : `${car.name} (${car.teamObj.short}) is out: ${car.dnf.toLowerCase()} failure.`, car.mine ? "bad" : "", car);
     if (car.mine || car.pos <= 8) banner(R, `Retirement: ${car.name} (${car.dnf.toLowerCase()})`, "bad");
     if (Math.random() < 0.25) startSC(R, "Stopped car on track");
@@ -275,10 +291,17 @@ function onCross(R, car) {
       tyre = R.wet ? null : st.tyre;
       if (R.wet) radio(R, `${car.code}: skipping the planned stop, track is wet. Your call on wets.`, "warn", car);
     }
-  } else tyre = aiPitChoice(R, car);
+  } else {
+    tyre = aiPitChoice(R, car);
+    if (tyre) {
+      const victim = R.cars.find(m => m.mine && !m.dnf && !m.finished && m.pitTimer <= 0 && m.pos === car.pos - 1 && car.gapAheadS < 2.5 && R.laps - m.lapIdx > 4);
+      if (victim && cool(victim, "undercut", 5)) decide(R, "undercut", `${car.code} is trying to undercut ${victim.code}`, `${car.name} just pitted from ${car.gapAheadS.toFixed(1)}s behind ${victim.name}. On fresh tires they'll gain about a second a lap. Box next lap to cover it, or stay out and push to build a gap.`, { [victim.id]: R.wet ? "W" : dryFor(R, victim) }, { mode: { [victim.id]: "push" }, car: victim.id });
+    }
+  }
   if (tyre && R.laps - car.lapIdx >= 1) {
     const p = pitLoss(car);
     car.pitTimer = p.loss; car.tyre = tyre; car.wear = 0; car.age = 0; car.stops++; car.wearWarned = false;
+    if (car.tel) { car.tel.tyre = 78; car.tel.stuck = 0; }
     if (!car.used.includes(tyre)) car.used.push(tyre);
     if (car.mine) radio(R, `${car.code} in the pits: ${PW.TYRES[tyre].name}s, ${p.stop.toFixed(1)}s stop.`, "", car);
     if (p.fumble && car.mine) radio(R, p.fumble + ". Wheel gun problem.", "bad", car);
@@ -291,11 +314,71 @@ function onCross(R, car) {
   }
   // engineer advice for my cars
   if (car.mine) advise(R, car);
+  if (car.tel) teleChecks(R, car);
   if (car.mine && !car.wearWarned && car.wear > 0.72 && R.laps - car.lapIdx > 3 && !car.pitReq && car.pitTimer <= 0 && !(car.plan[0] && car.plan[0].lap - car.lapIdx <= 1)) {
     car.wearWarned = true;
-    decide(R, "tyres", `${car.name}'s tires are fading`, `${Math.round((1 - car.wear) * 100)}% grip left on ${PW.TYRES[car.tyre].name}s with ${R.laps - car.lapIdx} laps to go${car.plan[0] ? `. The plan says box on lap ${car.plan[0].lap}` : ""}. Lap times fall off a cliff when the tires run out. Box now, or save them?`, { [car.id]: R.wet ? "W" : dryFor(R, car) });
+    decide(R, "tyres", `${car.name}'s tires are fading`, `${Math.round((1 - car.wear) * 100)}% grip left on ${PW.TYRES[car.tyre].name}s with ${R.laps - car.lapIdx} laps to go${car.plan[0] ? `. The plan says box on lap ${car.plan[0].lap}` : ""}. Lap times fall off a cliff when the tires run out. Box now, or save them?`, { [car.id]: R.wet ? "W" : dryFor(R, car) }, { car: car.id });
   }
   car.lapTime = lapTimeFor(R, car);
+}
+/* ---------- telemetry: temperatures, fuel, gaps ---------- */
+function cool(car, kind, laps) {
+  const t = car.tel; if (!t) return false;
+  if ((t.cd[kind] || -99) > car.lapIdx) return false;
+  t.cd[kind] = car.lapIdx + laps; return true;
+}
+function teleUpdate(R, car, dt) {
+  const t = car.tel, c = R.c;
+  if (car.pitTimer > 0) { const k = dt / 8; t.tyre += (74 - t.tyre) * k; t.brake += (420 - t.brake) * k; t.engine += (92 - t.engine) * k; return; }
+  const k = dt / car.lapTime, close = car.gapAheadS < 1.0, sc = !!R.sc;
+  const mode = car.mode === "push" ? 1 : car.mode === "save" ? -1 : 0;
+  const tyreT = { S: 102, M: 96, H: 89, W: 82 }[car.tyre] + mode * (mode > 0 ? 12 : 9) + (close ? 5 : 0) + (car.boost ? 4 : 0) + (c.wear - 1) * 25
+    + (R.wet && car.tyre !== "W" ? -18 : 0) + (!R.wet && car.tyre === "W" ? 25 : 0) - (sc ? 28 : 0);
+  const brakeT = 580 + c.brk * 260 + (close ? 110 : 0) + (mode > 0 ? 70 : mode < 0 ? -60 : 0) - (sc ? 250 : 0) - (R.wet ? 60 : 0);
+  const engT = 100 + (close ? 11 : 0) + (mode > 0 ? 6 : mode < 0 ? -5 : 0) + (car.boost ? 8 : 0) + c.hot * 9 - (sc ? 12 : 0);
+  t.tyre += (tyreT - t.tyre) * Math.min(1, k * 1.6);
+  t.brake += (brakeT - t.brake) * Math.min(1, k * 2.2);
+  t.engine += (engT - t.engine) * Math.min(1, k * 1.4);
+  t.fuel -= k * (sc ? 0.45 : (mode > 0 ? 1.06 : mode < 0 ? 0.9 : 1) + (car.boost ? 0.06 : 0));
+  if (t.fuel <= 0 && !car.finished && !car.dnf) {
+    car.dnf = "Out of fuel";
+    radio(R, `${car.code}: we're out of fuel. Stop the car. I'm sorry.`, "bad", car);
+    banner(R, `${car.name} has run out of fuel!`, "bad");
+  }
+}
+PW.fuelDelta = (R, car) => car.tel ? car.tel.fuel - Math.max(0, R.laps - Math.max(0, car.lapIdx) - (car.dist - Math.floor(car.dist))) : 0;
+PW.pitProjection = function (R, car) {
+  const loss = 21 + (2.1 + (100 - car.pit) * 0.022);
+  const proj = car.dist - loss / car.lapTime;
+  const others = R.cars.filter(o => o !== car && !o.dnf && !o.finished);
+  const ahead = others.filter(o => o.dist > proj).sort((a, b) => a.dist - b.dist)[0];
+  const behind = others.filter(o => o.dist <= proj).sort((a, b) => b.dist - a.dist)[0];
+  return {
+    pos: 1 + others.filter(o => o.dist > proj).length,
+    ahead, gapAhead: ahead ? (ahead.dist - proj) * car.lapTime : null,
+    behind, gapBehind: behind ? (proj - behind.dist) * car.lapTime : null,
+  };
+};
+function teleChecks(R, car) {
+  const t = car.tel, rem = R.laps - car.lapIdx;
+  // gap trends, recorded once a lap
+  const order = PW.raceOrder(R), behindCar = order[car.pos];
+  t.aheadHist.push(car.gapAheadS < 60 ? car.gapAheadS : null); t.aheadHist = t.aheadHist.slice(-4);
+  t.behindHist.push(behindCar && !behindCar.dnf && behindCar.gapAheadS < 60 ? behindCar.gapAheadS : null); t.behindHist = t.behindHist.slice(-4);
+  t.stuck = car.gapAheadS < 1.3 && !R.sc ? t.stuck + 1 : 0;
+  if (R.sc || car.lapIdx < 2 || rem < 2) return;
+  const save = { mode: { [car.id]: "save" }, car: car.id }, saving = car.mode === "save";
+  if (t.tyre > 112 && !saving && cool(car, "hot", 5)) decide(R, "hot", `${car.name}'s tires are overheating`, `Tires at ${Math.round(t.tyre)}°C. The working window is 95-105°C. Above it they lose grip and wear out fast. Switch to Save mode or back off out of the dirty air of the car ahead.`, {}, save);
+  else if (t.tyre < 79 && car.age >= 2 && car.mode !== "push" && cool(car, "cold", 8)) decide(R, "cold", `${car.name}'s tires are cold`, `Tires at only ${Math.round(t.tyre)}°C, below the 95-105°C window. Cold tires are slow and slippery. Push for a lap or two to bring the heat back.`, {}, { mode: { [car.id]: "push" }, car: car.id });
+  if (t.brake > 915 && !saving && cool(car, "brakes", 5)) decide(R, "brakes", `${car.name}'s brakes are too hot`, `Brakes at ${Math.round(t.brake)}°C. Above about 950°C they can fail. ${car.gapAheadS < 1 ? "Following closely is starving them of air. Drop back a second" : "Lift and coast into the braking zones"}, or switch to Save mode.`, {}, save);
+  if (t.engine > 121 && !saving && cool(car, "engine", 5)) decide(R, "engine", `${car.name}'s engine is running hot`, `Engine at ${Math.round(t.engine)}°C. It's losing power, and above 125°C it could fail. ${car.gapAheadS < 1 ? "The dirty air of the car ahead is cooking it. Back off a little" : "Ease off the boost and pushing"}, or switch to Save mode.`, {}, save);
+  const fd = PW.fuelDelta(R, car);
+  if (fd < -0.2 && rem > 1 && !saving && cool(car, "fuel", 4)) decide(R, "fuel", `${car.name} is short on fuel`, `Fuel is ${Math.abs(fd).toFixed(1)} laps short of the finish at this rate. Save mode uses about 10% less per lap. If it runs dry, the car stops on track.`, {}, save);
+  // undercut chance: stuck behind a car and a stop would rejoin in clear air
+  if (t.stuck >= 3 && car.age >= 8 && rem > 8 && !car.pitReq && !R.wet && cool(car, "undercutGo", 8)) {
+    const pp = PW.pitProjection(R, car), ahead = order[car.pos - 2];
+    if (pp.gapAhead == null || pp.gapAhead > 1.5) decide(R, "undercutGo", `Undercut chance for ${car.code}`, `${car.name} has been stuck behind ${ahead ? ahead.name : "the car ahead"} for ${t.stuck} laps. A stop now rejoins P${pp.pos}${pp.ahead ? `, ${pp.gapAhead.toFixed(1)}s behind ${pp.ahead.code}` : ""} in clear air. Fresh tires could jump them when they stop.`, { [car.id]: dryFor(R, car) }, { car: car.id });
+  }
 }
 function advise(R, car) {
   const re = PW.state().staff.re.rating, remaining = R.laps - car.lapIdx;
@@ -363,12 +446,15 @@ PW.stepRace = function (R, dt) {
     else car.ers = Math.min(100, car.ers + dt * (car.mode === "save" ? 22 : car.mode === "push" ? 7 : 12) / car.lapTime);
     car.dist += dt / car.lapTime * (car.boost ? BOOST_SPEED : 1);
   });
+  live.forEach(car => { if (car.tel) teleUpdate(R, car, dt); });
   // following, overtaking, safety-car bunching
   const order = live.slice().sort((a, b) => b.dist - a.dist);
+  if (order[0]) order[0].gapAheadS = 99;
   for (let i = 1; i < order.length; i++) {
     const car = order[i], ahead = order[i - 1];
     if (car.pitTimer > 0 || ahead.pitTimer > 0) continue;
     const gapS = (ahead.dist - car.dist) * car.lapTime;
+    car.gapAheadS = gapS;
     // rivals use their battery to attack and defend
     if (!R.sc) {
       if (!car.mine) { if (!car.boost && car.lapIdx >= 2 && gapS < 0.9 && car.ers > 45 && car.lapTime < ahead.lapTime + 0.35 && Math.random() < dt * 0.04) car.boost = true; else if (car.boost && (gapS > 1.6 || car.ers < 8)) car.boost = false; }

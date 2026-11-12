@@ -101,18 +101,18 @@ PW.SPONSOR_NAMES = ["Quantix Cloud", "Halo Energy Drink", "Brightwater Bank", "T
 /* ---------- circuits ---------- */
 // aero/power/mech weights sum ~1. wear: tire wear factor. rain: chance of rain. pass: overtaking ease. base: lap seconds.
 PW.CIRCUITS = [
-  { name: "Sakhir",          country: "Bahrain",       shape: "bh-2002", laps: 24, base: 92,  aero: .35, power: .35, mech: .30, wear: 1.2,  rain: .02, pass: 1.2,  tag: "Season opener under the lights. Hard on rear tires" },
-  { name: "Spielberg",       country: "Austria",       shape: "at-1969", laps: 26, base: 66,  aero: .25, power: .50, mech: .25, wear: .9,   rain: .30, pass: 1.3,  tag: "Short, fast and rain-prone, with big braking zones" },
-  { name: "Monaco",          country: "Monaco",        shape: "mc-1929", laps: 26, base: 74,  aero: .30, power: .10, mech: .60, wear: .75,  rain: .10, pass: .35,  tag: "Street circuit. Qualifying is everything" },
-  { name: "Barcelona",       country: "Spain",         shape: "es-1991", laps: 24, base: 78,  aero: .50, power: .25, mech: .25, wear: 1.3,  rain: .05, pass: .8,   tag: "Aero test track that eats tires. Two stops likely" },
-  { name: "Silverstone",     country: "Great Britain", shape: "gb-1948", laps: 22, base: 88,  aero: .55, power: .25, mech: .20, wear: 1.15, rain: .40, pass: 1.05, tag: "Fast sweepers and unpredictable weather" },
-  { name: "Monza",           country: "Italy",         shape: "it-1922", laps: 22, base: 82,  aero: .15, power: .65, mech: .20, wear: .85,  rain: .15, pass: 1.4,  tag: "Temple of speed. Engine power wins here" },
-  { name: "Suzuka",          country: "Japan",         shape: "jp-1962", laps: 22, base: 92,  aero: .50, power: .25, mech: .25, wear: 1.1,  rain: .35, pass: .8,   tag: "The figure-eight. A true driver's track" },
-  { name: "Mexico City",     country: "Mexico",        shape: "mx-1962", laps: 24, base: 79,  aero: .35, power: .45, mech: .20, wear: .95,  rain: .15, pass: 1.1,  tag: "Thin air at altitude and a very long straight" },
-  { name: "Austin",          country: "United States", shape: "us-2012", laps: 22, base: 97,  aero: .35, power: .30, mech: .35, wear: 1.15, rain: .20, pass: 1.25, tag: "Bumpy, abrasive, lots of overtaking" },
-  { name: "Singapore",       country: "Singapore",     shape: "sg-2008", laps: 22, base: 95,  aero: .35, power: .15, mech: .50, wear: 1.05, rain: .25, pass: .55,  tag: "Night street race. Hot, bumpy, safety cars likely" },
-  { name: "Spa",             country: "Belgium",       shape: "be-1925", laps: 18, base: 106, aero: .40, power: .40, mech: .20, wear: 1.05, rain: .45, pass: 1.2,  tag: "Long, fast classic where it can rain on one end only" },
-  { name: "Abu Dhabi",       country: "UAE",           shape: "ae-2009", laps: 24, base: 86,  aero: .35, power: .35, mech: .30, wear: 1.0,  rain: .02, pass: 1.0,  tag: "Twilight season finale" },
+  { name: "Sakhir", brk: 0.7, hot: 0.7,          country: "Bahrain",       shape: "bh-2002", laps: 24, base: 92,  aero: .35, power: .35, mech: .30, wear: 1.2,  rain: .02, pass: 1.2,  tag: "Season opener under the lights. Hard on rear tires" },
+  { name: "Spielberg", brk: 0.8, hot: 0.2,       country: "Austria",       shape: "at-1969", laps: 26, base: 66,  aero: .25, power: .50, mech: .25, wear: .9,   rain: .30, pass: 1.3,  tag: "Short, fast and rain-prone, with big braking zones" },
+  { name: "Monaco", brk: 0.9, hot: 0.5,          country: "Monaco",        shape: "mc-1929", laps: 26, base: 74,  aero: .30, power: .10, mech: .60, wear: .75,  rain: .10, pass: .35,  tag: "Street circuit. Qualifying is everything" },
+  { name: "Barcelona", brk: 0.4, hot: 0.5,       country: "Spain",         shape: "es-1991", laps: 24, base: 78,  aero: .50, power: .25, mech: .25, wear: 1.3,  rain: .05, pass: .8,   tag: "Aero test track that eats tires. Two stops likely" },
+  { name: "Silverstone", brk: 0.3, hot: 0.1,     country: "Great Britain", shape: "gb-1948", laps: 22, base: 88,  aero: .55, power: .25, mech: .20, wear: 1.15, rain: .40, pass: 1.05, tag: "Fast sweepers and unpredictable weather" },
+  { name: "Monza", brk: 0.8, hot: 0.3,           country: "Italy",         shape: "it-1922", laps: 22, base: 82,  aero: .15, power: .65, mech: .20, wear: .85,  rain: .15, pass: 1.4,  tag: "Temple of speed. Engine power wins here" },
+  { name: "Suzuka", brk: 0.4, hot: 0.3,          country: "Japan",         shape: "jp-1962", laps: 22, base: 92,  aero: .50, power: .25, mech: .25, wear: 1.1,  rain: .35, pass: .8,   tag: "The figure-eight. A true driver's track" },
+  { name: "Mexico City", brk: 0.85, hot: 1.0,     country: "Mexico",        shape: "mx-1962", laps: 24, base: 79,  aero: .35, power: .45, mech: .20, wear: .95,  rain: .15, pass: 1.1,  tag: "Thin air at altitude and a very long straight" },
+  { name: "Austin", brk: 0.55, hot: 0.6,          country: "United States", shape: "us-2012", laps: 22, base: 97,  aero: .35, power: .30, mech: .35, wear: 1.15, rain: .20, pass: 1.25, tag: "Bumpy, abrasive, lots of overtaking" },
+  { name: "Singapore", brk: 0.9, hot: 0.9,       country: "Singapore",     shape: "sg-2008", laps: 22, base: 95,  aero: .35, power: .15, mech: .50, wear: 1.05, rain: .25, pass: .55,  tag: "Night street race. Hot, bumpy, safety cars likely" },
+  { name: "Spa", brk: 0.5, hot: 0.2,             country: "Belgium",       shape: "be-1925", laps: 18, base: 106, aero: .40, power: .40, mech: .20, wear: 1.05, rain: .45, pass: 1.2,  tag: "Long, fast classic where it can rain on one end only" },
+  { name: "Abu Dhabi", brk: 0.6, hot: 0.6,       country: "UAE",           shape: "ae-2009", laps: 24, base: 86,  aero: .35, power: .35, mech: .30, wear: 1.0,  rain: .02, pass: 1.0,  tag: "Twilight season finale" },
 ];
 PW.POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 PW.PRIZE = [62, 55, 49, 44, 39, 35, 31, 27, 23, 19]; // $M by constructors' position

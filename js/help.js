@@ -28,6 +28,7 @@ const STEPS = [
   { screen: "race", sel: ".mapwrap", race: true, title: "The race is on", text: "Each car is drawn in its team color. Yours glow white and show their names. 1× is about 6 seconds a lap. Speed up with the buttons at the top, or pause with the space bar. With <b>Auto-pause</b> on, the race stops by itself whenever there's a call to make." },
   { screen: "race", sel: ".tower", race: true, title: "Timing tower", text: "Positions, the gap to the leader and each car's current tire. PIT means a car is stopping, and OUT means it has retired." },
   { screen: "race", sel: ".carctl", race: true, title: "Your controls", text: "The <b>tire bar</b> shows grip left. <b>Push</b> is faster but wears tires and the engine, and <b>Save tires</b> makes them last. Tap a tire under <b>Box for</b> to pit at the end of the lap. <b>⚡ Boost</b> uses the battery for extra speed to attack or defend. It recharges as you drive, faster in Save mode." },
+  { screen: "race", sel: ".tele", race: true, title: "Live telemetry", text: "This is your pit-wall feed. <b>Tires</b> work best at 95-105°C. <b>Brakes</b> and the <b>engine</b> overheat when you push or sit in another car's dirty air, and too hot means failures. <b>Fuel</b> shows laps spare (or short). Below that are the gaps ahead and behind and how fast they're changing, plus where you'd rejoin if you boxed now. When something needs a call, the race pauses for you." },
   { screen: "race", sel: ".radio", race: true, title: "Listen to the radio", text: "Your engineer calls out worn tires, rain and safety cars. A <b>safety car</b> bunches the field, which makes it the cheapest time to pit. When rain arrives, box for wets fast.", next: { label: "Start racing ›", go: () => { const R = PW.ui.R; if (R) R.paused = !!R.decision; } } },
   { screen: "results", sel: ".podium", title: "After the race", text: "Points, prize money, finished research and driver morale all update here. That's the whole loop: upgrade, hire, race, repeat. Get from the back of the grid to the championship. Good luck!", done: "Let's go" },
 ];
@@ -137,6 +138,15 @@ const GUIDE = `
 <li><b>Team orders:</b> when your cars run nose to tail, you can swap them. The demoted driver won't like it.</li>
 <li><b>Speed:</b> 1× (about 6 seconds a lap) to 8×, pause (space bar), or ⏭ to skip to the finish.</li>
 <li><b>Auto-pause:</b> on by default. The race freezes for safety cars, rain on the radar, rain arriving or clearing, and fading tires. Tap a tire to box (green ring = engineer's suggestion), then <b>Keep racing</b>.</li>
+</ul>
+<h3>Telemetry (your pit-wall feed)</h3>
+<ul>
+<li><b>Tires °C:</b> the window is 95-105°C. Too hot (pushing, following closely) means grip loss and fast wear. Too cold (after a safety car, on hards) means slow laps. Use Save or Push to steer the temperature.</li>
+<li><b>Brakes °C:</b> heavy-braking tracks (Monaco, Singapore, Mexico, Monza) and sitting close behind another car heat them. Above about 950°C they can fail.</li>
+<li><b>Engine °C:</b> dirty air, Push and boost heat it. Above 120°C it loses power, and above 125°C it can fail.</li>
+<li><b>Fuel:</b> laps spare or short at the current rate. Pushing and boosting burn more, and Save uses about 10% less. Choose a Light, Standard or Heavy fuel load before the race.</li>
+<li><b>Gaps:</b> the gaps ahead and behind with their trend per lap (▼ closing, ▲ opening), and where you'd rejoin if you boxed now.</li>
+<li>The race pauses for overheating, low fuel, cold tires, a rival trying to undercut you, and undercut chances of your own.</li>
 </ul>
 <h3>Things that change races</h3>
 <ul>
