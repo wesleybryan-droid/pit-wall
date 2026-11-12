@@ -5,9 +5,10 @@ const { rand, randi, pick, clamp } = PW;
 const SAVE_KEY = "pitwall-save-v1";
 let S = null;
 PW.state = () => S;
+PW.setState = obj => { S = obj; };
 
 /* ---------- new career ---------- */
-PW.newCareer = function (teamName, color) {
+PW.newCareer = function (teamName, color, opts) {
   const teams = {};
   PW.TEAMS.forEach(t => {
     const base = 62 + (t.tier - 0.78) / 0.22 * 22;
@@ -43,6 +44,7 @@ PW.newCareer = function (teamName, color) {
   S.sponsors.push(makeSponsor(0.9), makeSponsor(0.7));
   S.sponsors.forEach(s => s.signedRound = 0);
   refreshSponsorOffers(); refreshStaffMarket();
+  if (opts && opts.daily) S.daily = true; // daily races never touch the career save
   news(`Welcome to the pit wall. ${teams.you.name} starts the season as the slowest car on the grid. Time to change that.`);
   PW.save();
   return S;
@@ -52,7 +54,7 @@ function news(msg, kind) { S.news.unshift({ msg, kind: kind || "", season: S.sea
 PW.news = news;
 
 /* ---------- save / load ---------- */
-PW.save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} if (PW.protectStorage) PW.protectStorage(); };
+PW.save = () => { if (S && S.daily) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} if (PW.protectStorage) PW.protectStorage(); };
 PW.load = () => { try { const t = localStorage.getItem(SAVE_KEY); if (t) { S = JSON.parse(t); upgradeSave(); return S; } } catch (e) {} return null; };
 function upgradeSave() { if (S.fragility == null) S.fragility = 0; if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
 PW.wipe = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = null; };

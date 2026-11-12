@@ -137,6 +137,7 @@ const GUIDE = `
 <li><b>⚡ Boost:</b> spends battery for about 0.6s a lap of extra speed and a much better chance to overtake or defend. A full battery lasts about 2½ laps of boosting and recharges as you drive (fastest in Save mode). Rivals use theirs too.</li>
 <li><b>Team orders:</b> when your cars run nose to tail, you can swap them. The demoted driver won't like it.</li>
 <li><b>Speed:</b> 1× (about 6 seconds a lap) to 8×, pause (space bar), or ⏭ to skip to the finish.</li>
+<li><b>Slow-mo:</b> on by default. The race drops to normal speed (8× drops to 2×) for your battles, overtakes and pit stops, crashes, safety cars, rain and the final lap, then returns to your speed.</li>
 <li><b>Auto-pause:</b> on by default. The race freezes for safety cars, rain on the radar, rain arriving or clearing, and fading tires. Tap a tire to box (green ring = engineer's suggestion), then <b>Keep racing</b>.</li>
 </ul>
 <h3>Telemetry (your pit-wall feed)</h3>
@@ -163,6 +164,12 @@ const GUIDE = `
 <li>Each season has 12 rounds, a mid-season rule change, and prize money by championship position.</li>
 <li>Between seasons, a new set of regulations rewrites one area (aero, engine, chassis or tires) and shakes up the order. Drivers age, and contracts end.</li>
 <li><b>Back up your career</b> from ☰ → Save & backup: download a save file or copy a save code. Some browsers (especially Safari) can delete saved games after a week without a visit. You can also install Pit Wall as an app from your browser's share or install menu.</li>
+</ul>
+<h3>Daily Grand Prix</h3>
+<ul>
+<li>One race a day, the same for everyone: same circuit, same midfield car, same rivals and weather. It's separate from your career.</li>
+<li>Your first finish of the day is your official result. Race again as often as you like for practice.</li>
+<li>Share your result (position, places gained and tire strategy, no spoilers) and keep your daily streak going.</li>
 </ul>
 <h3>Tips</h3>
 <ul>

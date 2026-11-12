@@ -355,3 +355,14 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 
 .issuetag{color:#ff8088;font-weight:700}
 .decision.issue{border-top-color:var(--red)}
+
+.flag.slowmo{background:rgba(178,108,255,.2);color:#d9b8ff;margin-left:6px;border:1px solid rgba(178,108,255,.5)}
+.tvb.info{border-left-color:var(--muted);color:var(--muted);font-weight:700}
+.tvb.p1{font-size:17px;box-shadow:0 0 0 1px rgba(255,255,255,.12),0 10px 28px rgba(0,0,0,.6)}
+
+/* daily grand prix */
+.dailycard{border-color:rgba(255,176,0,.45);background:linear-gradient(135deg,rgba(255,176,0,.10),var(--panel) 60%)}
+.dtag2{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--amber);font-weight:700}
+.lnk{color:var(--amber)}
+.sharebox{display:inline-block;text-align:left;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:10px 14px;margin:14px auto 0;font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--text)}
+.card.daily{border-color:rgba(255,176,0,.5)}

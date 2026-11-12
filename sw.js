@@ -1,6 +1,6 @@
 /* Pit Wall service worker: offline play. Serves from cache, refreshes in the background.
    Bump VERSION when files are added or removed. */
-const VERSION = "pitwall-v1";
+const VERSION = "pitwall-v2";
 const FILES = [
   "./",
   "index.html",
@@ -57,6 +57,7 @@ const FILES = [
   "img/icons/icon-192.png",
   "img/icons/icon-512.png",
   "img/icons/icon-maskable-512.png",
+  "js/daily.js",
   "js/data.js",
   "js/game.js",
   "js/help.js",

@@ -84,6 +84,7 @@ function renderTitle() {
     <label class="row" style="margin-top:6px;cursor:pointer;font-weight:600"><input type="checkbox" id="tut" checked style="width:18px;height:18px"> Show me how to play (recommended)</label>
     <div class="row" style="margin-top:22px"><button class="btn go" data-a="new">Start career</button><button class="btn ghost" data-a="guide">How to play</button></div>
     <button class="btn sm ghost" data-a="backup" style="margin-top:12px">Restore a saved career</button>
+    ${dailyCard(true)}
     <p class="dim" style="font-size:12px;margin-top:28px">Unofficial fan game. Not affiliated with Formula 1 or any team, driver or circuit. Teams and drivers are fictional.</p>
   </div></div>`;
 }
@@ -155,6 +156,15 @@ function eventModal() {
     <p class="dim" style="font-size:12px;margin:12px 0 0">Cash: ${M(S().cash)}</p></div></div>`;
 }
 
+function dailyCard(onTitle) {
+  if (!PW.dailyInfo) return "";
+  const d = PW.dailyInfo(), r = d.result, streak = PW.dailyStreak();
+  return `<div class="card dailycard" ${onTitle ? 'style="margin-top:22px"' : ""}>
+    <div class="spread"><div><div class="dtag2">Daily Grand Prix #${d.n}</div><b style="font-size:17px">${esc(d.circuit.name)}</b> <span class="muted" style="font-size:13px">· same race for everyone today</span></div>
+    ${r ? `<span class="pill green">Done: ${r.pos ? "P" + r.pos : "DNF"}</span>` : `<button class="btn primary sm" data-a="daily">Race now</button>`}</div>
+    <div class="muted" style="font-size:12px;margin-top:6px">${r ? `Come back tomorrow for #${d.n + 1}. ${streak > 1 ? `🔥 ${streak}-day streak.` : ""} <a href="#" data-a="daily" class="lnk">Race again (practice)</a>` : `A one-race challenge in a midfield car. It doesn't affect your career.${streak ? ` 🔥 ${streak}-day streak.` : ""}`}</div></div>`;
+}
+
 /* ---------- HQ ---------- */
 function pageHQ() {
   const s = S(), c = PW.circuit(), me = s.teams.you;
@@ -191,6 +201,7 @@ function pageHQ() {
       </div>
     </div>
     <div class="grid" style="align-content:start">
+      ${dailyCard()}
       <div class="card" id="status">${carPic(me, "status")}<h3>Team status</h3>
         <div class="spread"><span>Income per race</span><b class="num good">${M(PW.TV_PER_RACE + spons)}</b></div>
         <div class="spread"><span>Salaries + operations</span><b class="num bad">−${M(w.total / 12 + PW.OPS_PER_RACE).slice(1)}</b></div>
@@ -318,17 +329,19 @@ function pageStandings() {
 }
 
 /* ---------- race weekend ---------- */
-function startWeekend() {
+function startWeekend(opts) {
   const c = PW.circuit();
   const wetStart = Math.random() < c.rain * 0.5, wx = PW.weatherPlan(c, wetStart);
   W = { round: S().round, fuel: "std", step: "practice", practice: [], bonus: {}, qualiMode: "std", wetStart, wx, outlook: PW.rainOutlook(wx, wetStart), advice: PW.setupAdvice(), gapMode: "leader", grid: null, plans: {}, presets: null };
   W.setup = W.advice;
+  W.daily = opts && opts.daily || null;
   render();
+  window.scrollTo(0, 0);
 }
 function weekendHeader(stepIdx) {
   const c = PW.circuit(W.round);
-  return `<div class="top"><div class="topbar"><div class="logo"><div class="stripe"></div><div>${esc(c.name)}<small>Round ${W.round + 1} · ${esc(c.country)}</small></div></div>
-    <div class="kpis"><span class="pill ${W.wetStart ? "blue" : ""}">${W.wetStart ? "🌧 Wet" : "☀ Dry"} · radar ${W.outlook}% rain</span><button class="iconbtn" data-a="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-a="guide" title="How to play">?</button></div></div></div>
+  return `<div class="top"><div class="topbar"><div class="logo"><div class="stripe"></div><div>${esc(c.name)}<small>${W.daily ? `Daily Grand Prix #${W.daily.n}` : `Round ${W.round + 1}`} · ${esc(c.country)}</small></div></div>
+    <div class="kpis">${W.daily ? `<button class="iconbtn" data-a="dailyquit" title="Leave the daily race">Exit daily</button>` : ""}<span class="pill ${W.wetStart ? "blue" : ""}">${W.wetStart ? "🌧 Wet" : "☀ Dry"} · radar ${W.outlook}% rain</span><button class="iconbtn" data-a="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-a="guide" title="How to play">?</button></div></div></div>
     <div class="page" style="padding-bottom:0"><div class="steps">${[0, 1, 2, 3, 4].map(i => `<div class="${i <= stepIdx ? "on" : ""}"></div>`).join("")}</div></div>`;
 }
 const PRACTICE = [
@@ -422,7 +435,7 @@ function renderRace() {
   const c = R.c;
   app.innerHTML = `<div class="race">
     <div class="rbar"><div class="lap num" id="rLap"></div><div id="rFlag"></div>
-      <div class="speed">${[["pause", "❚❚"], [1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]].map(([v, l]) => `<button class="btn sm" data-pd="speed" data-v="${v}" id="sp-${v}">${l}</button>`).join("")}<button class="btn sm" data-pd="simend" title="Skip to the finish">⏭</button><button class="btn sm" data-pd="autopause" id="apBtn" title="Pause automatically when there's a decision to make"></button><button class="iconbtn" data-pd="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-pd="guide" title="How to play">?</button></div></div>
+      <div class="speed">${[["pause", "❚❚"], [1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]].map(([v, l]) => `<button class="btn sm" data-pd="speed" data-v="${v}" id="sp-${v}">${l}</button>`).join("")}<button class="btn sm" data-pd="simend" title="Skip to the finish">⏭</button><button class="btn sm" data-pd="autopause" id="apBtn" title="Pause automatically when there's a decision to make"></button><button class="btn sm" data-pd="slowmo" id="slBtn" title="Drop to 1x for battles, pit stops, incidents and the final lap"></button><button class="iconbtn" data-pd="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-pd="guide" title="How to play">?</button></div></div>
     <div class="mapwrap"><canvas id="map"></canvas><div class="tvbanner" id="rBanner"></div><div id="rDecision"></div><div class="lights" id="lights">${R.started ? "" : `<div class="rig">${"<i></i>".repeat(5)}</div>`}</div></div>
     <div class="tower"><div class="hd" data-pd="gapmode" title="Tap to switch between gap to leader and interval to car ahead"><span id="rGapMode"></span><span id="rWeather"></span></div><div id="tower"></div></div>
     <div class="ctl" id="ctl"></div>
@@ -435,10 +448,11 @@ function renderRace() {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (R.started && !R.paused && !R.finished) {
-      const simDt = dt * R.speed * (c.base / 6); // 1x is about 6 seconds a lap
+      const eff = R.slowmo && R.speed > 1 && R.slowUntil > R.t ? Math.max(1, R.speed / 4) : R.speed; // slow motion for key moments (8x drops to 2x, slower speeds to 1x)
+      const simDt = dt * eff * (c.base / 6); // 1x is about 6 seconds a lap
       const n = Math.ceil(simDt / 0.5);
       for (let i = 0; i < n; i++) { PW.stepRace(R, simDt / n); if (R.paused) break; }
-      Snd.humRate(R.speed);
+      Snd.humRate(eff);
     }
     PW.drawTrack(document.getElementById("map"), R);
     domT += dt;
@@ -466,7 +480,10 @@ function updateRaceDom(full) {
   const lap = Math.min(R.laps, Math.max(1, leader.lapIdx + 1));
   const set = (id, h) => { const el = document.getElementById(id); if (el && el.innerHTML !== h) el.innerHTML = h; };
   set("rLap", R.finished ? `FINISHED <small>${R.laps} laps</small>` : `LAP ${lap}<small> / ${R.laps}</small>`);
-  set("rFlag", R.sc ? `<span class="flag sc">Safety car</span>` : R.wet ? `<span class="flag rain">Wet track</span>` : R.leaderDone ? `<span class="flag green">Chequered flag</span>` : "");
+  const slowmoOn = R.slowmo && R.speed > 1 && !R.paused && R.slowUntil > R.t && !R.finished;
+  set("rFlag", (R.sc ? `<span class="flag sc">Safety car</span>` : R.wet ? `<span class="flag rain">Wet track</span>` : R.leaderDone ? `<span class="flag green">Chequered flag</span>` : "") + (slowmoOn ? `<span class="flag slowmo">Slow-mo · ${esc(R.slowWhy || "")}</span>` : ""));
+  set("slBtn", R.slowmo ? "Slow-mo on" : "Slow-mo off");
+  const slb = document.getElementById("slBtn"); if (slb) slb.classList.toggle("on", R.slowmo);
   set("rWeather", (R.wet ? "🌧 Wet" : "☀ Dry") + (R.forecast ? (R.forecast.wet ? ` · rain ~L${R.forecast.lap}` : ` · drying ~L${R.forecast.lap}`) : ""));
   set("rGapMode", W.gapMode === "leader" ? "Gap to leader ⇄" : "Interval ⇄");
   set("apBtn", R.autoPause ? "Auto-pause on" : "Auto-pause off");
@@ -474,9 +491,9 @@ function updateRaceDom(full) {
   set("rDecision", decisionCard());
   const bn = document.getElementById("rBanner");
   if (bn) {
-    const on = R.banner && performance.now() - R.banner.at < 3800;
-    const html = on ? `<span class="tvb ${R.banner.kind}">${esc(R.banner.text)}</span>` : "";
-    if (bn.dataset.key !== (on ? R.banner.at + "" : "")) { bn.innerHTML = html; bn.dataset.key = on ? R.banner.at + "" : ""; }
+    const b = PW.bannerTick(R, order);
+    const key = b ? b.shownAt + "" : "";
+    if (bn.dataset.key !== key) { bn.innerHTML = b ? `<span class="tvb ${b.kind} p${b.prio}">${esc(b.text)}</span>` : ""; bn.dataset.key = key; }
   }
   ["pause", 1, 2, 4, 8].forEach(v => { const b = document.getElementById("sp-" + v); if (b) b.classList.toggle("on", v === "pause" ? R.paused : (!R.paused && R.speed === v)); });
   set("tower", order.map((car, i) => {
@@ -564,7 +581,8 @@ function intervalText(R, car, ahead, leader) {
 function finishRace() {
   const res = PW.raceResult(R);
   res.pole = !!W.pole; res.poleId = W.pole;
-  W.report = PW.applyRace(res);
+  if (W.daily) W.dailyRec = PW.dailyRecord(res, W.daily);
+  else W.report = PW.applyRace(res);
   W.res = res;
   W.step = "results";
   R = null;
@@ -592,7 +610,28 @@ function lapChart(lc) {
   const grid = [1, 5, 10, 15, 20].map(p => `<line x1="${px}" x2="${W2 - 10}" y1="${y(p)}" y2="${y(p)}" stroke="rgba(255,255,255,.06)"/><text x="4" y="${y(p) + 3}" font-size="9" fill="#8b95a7">P${p}</text>`).join("");
   return `<svg viewBox="0 0 ${W2 + 24} ${H2}" style="width:100%;height:auto;display:block" role="img" aria-label="Position of each car on every lap">${grid}${lines}</svg><div class="muted" style="font-size:12px">Your drivers are the bold lines. Lap 0 is the starting grid.</div>`;
 }
+function renderDailyResults() {
+  const res = W.res, d = W.daily, rec = W.dailyRec, e = rec.entry, off = rec.officialEntry;
+  const moved = e.pos ? e.grid - e.pos : 0;
+  const rows = res.classified.map((x, i) => `<tr class="${x.mine ? "me" : ""}"><td>${i + 1}</td><td><span class="who">${face(S().drivers.find(dd => dd.id === x.id), 24)}<span><span class="sw" style="background:${x.color}"></span>${esc(x.name)}</span></span></td><td class="num">${x.dnf ? `<span class="dnf">DNF</span>` : x.gap}</td><td class="num muted">${x.grid}</td><td>${(x.stints || []).map(tyre).join("")}</td></tr>`).join("");
+  const ms = PW.msToTomorrow(), hh = Math.floor(ms / 3600000), mm = Math.floor(ms % 3600000 / 60000);
+  app.innerHTML = weekendHeader(4) + `<div class="page">
+    <div class="card team daily" style="text-align:center">
+      <div class="muted" style="text-transform:uppercase;letter-spacing:.14em;font-weight:700;font-size:12px">Daily Grand Prix #${d.n} · ${esc(d.circuit.name)}</div>
+      <h1 class="bigh">${e.pos ? (e.pos === 1 ? "Victory!" : "P" + e.pos) : "Did not finish"}</h1>
+      <div class="muted">${e.code} · from P${e.grid}${e.pos ? (moved > 0 ? ` · <span class="good">▲${moved} places</span>` : moved < 0 ? ` · <span class="bad">▼${-moved}</span>` : "") : ` · ${esc(e.dnf || "")}`} · strategy ${e.stints.map(tyre).join("")}</div>
+      <p class="${rec.official ? "good" : "muted"}" style="margin:12px 0 4px;font-weight:700">${rec.official ? "Your official result for today is in." : `Practice run. Your official result today is ${off.pos ? "P" + off.pos : "a DNF"} (first finish counts).`}</p>
+      <p class="muted" style="margin:0 0 14px;font-size:13px">${PW.dailyStreak() > 1 ? `🔥 ${PW.dailyStreak()}-day streak · ` : ""}Next daily in ${hh}h ${mm}m</p>
+      <div class="row" style="justify-content:center"><button class="btn go" data-a="dailyshare">Share result</button><button class="btn" data-a="dailyretry">Race it again</button><button class="btn ghost" data-a="leave">Done</button></div>
+      <pre class="sharebox" id="sharebox">${esc(PW.dailyShareText(off))}</pre>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3>Lap chart</h3>${lapChart(res.lapChart)}</div>
+      <div class="card" style="overflow-x:auto"><h3>Classification</h3><table><thead><tr><th>#</th><th>Driver</th><th>Gap</th><th>Grid</th><th>Tires</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div></div>`;
+}
 function renderResults() {
+  if (W.daily) return renderDailyResults();
   const res = W.res, rep = W.report, s = S();
   const top3 = res.classified.slice(0, 3);
   const podium = [1, 0, 2].map(i => { const e = top3[i]; if (!e) return ""; const h = [110, 140, 90][[1, 0, 2].indexOf(i)]; return `<div>${face(s.drivers.find(x => x.id === e.id), 78, "pod")}<div class="nm" style="color:${e.color}">${e.code}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${esc(s.teams[e.team].short)}</div><div class="blk" style="height:${h}px;border-top:4px solid ${e.color}">${i + 1}</div></div>`; }).join("");
@@ -678,8 +717,12 @@ app.addEventListener("click", e => {
     case "runquali": W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup, W.bonus); W.pole = W.grid[0].mine ? W.grid[0].id : null; if (W.pole) toast("⏱️ Pole position!"); W.step = "grid"; W.animGrid = true; Snd.go(); render(); break;
     case "fuel": W.fuel = v; Snd.click(); render(); break;
     case "plan": W.plans[v] = W.presets.find(p => p.id === el.dataset.p); Snd.click(); render(); break;
-    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx, W.bonus, W.fuel); R.autoPause = autoPausePref(); W.step = "race"; window.scrollTo(0, 0); render(); break;
-    case "leave": W = null; tab = "hq"; render(); window.scrollTo(0, 0); break;
+    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx, W.bonus, W.fuel); R.autoPause = autoPausePref(); R.slowmo = (() => { try { return localStorage.getItem("pitwall-slowmo") !== "off"; } catch (e) { return true; } })(); W.step = "race"; window.scrollTo(0, 0); render(); break;
+    case "leave": if (W && W.daily) { PW.endDaily(); window.scrollTo(0, 0); break; } W = null; tab = "hq"; render(); window.scrollTo(0, 0); break;
+    case "daily": Snd.click(); PW.startDaily(); break;
+    case "dailyquit": if (confirm("Leave today's daily race? Nothing is recorded until you finish.")) PW.endDaily(); break;
+    case "dailyretry": PW.retryDaily(); break;
+    case "dailyshare": { const txt = PW.dailyShareText(W.dailyRec.officialEntry); (navigator.share ? navigator.share({ text: txt }).catch(() => {}) : navigator.clipboard.writeText(txt).then(() => toast("Result copied. Paste it anywhere.")).catch(() => toast("Copy the text below the buttons."))); break; }
     case "nextseason": { const renew = [...document.querySelectorAll(".renew:checked")].map(x => x.value); PW.finishSeason(renew); tab = "hq"; render(); window.scrollTo(0, 0); break; }
   }
 });
@@ -694,6 +737,7 @@ app.addEventListener("pointerdown", e => {
     case "speed": if (v === "pause") R.paused = !R.paused; else { R.speed = +v; R.paused = false; } if (!R.paused) R.decision = null; break;
     case "dresume": R.decision = null; R.paused = false; break;
     case "boost": PW.setBoost(R, car, !car.boost); break;
+    case "slowmo": R.slowmo = !R.slowmo; try { localStorage.setItem("pitwall-slowmo", R.slowmo ? "on" : "off"); } catch (e) {} break;
     case "autopause": R.autoPause = !R.autoPause; try { localStorage.setItem("pitwall-autopause", R.autoPause ? "on" : "off"); } catch (e) {} if (!R.autoPause && R.decision) { R.decision = null; R.paused = false; } break;
     case "simend": if (!R.started) return; PW.runToEnd(R); break;
     case "sound": Snd.toggle(); if (Snd.on && R.started && !R.finished) Snd.humStart(); el.textContent = Snd.on ? "🔊" : "🔇"; break;
@@ -717,5 +761,5 @@ PW.load();
 render();
 // test hook: lets automated play-tests reach the live race and weekend
 PW.debug = { get R() { return R; }, get W() { return W; }, render };
-PW.ui = { get R() { return R; }, get W() { return W; }, render, setTab(t) { if (W) return; tab = t; render(); window.scrollTo(0, 0); }, reset() { W = null; R = null; Snd.humStop(); render(); } };
+PW.ui = { get R() { return R; }, get W() { return W; }, render, startWeekend, setTab(t) { if (W) return; tab = t; render(); window.scrollTo(0, 0); }, reset() { W = null; R = null; Snd.humStop(); render(); } };
 })();

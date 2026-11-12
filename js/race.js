@@ -114,7 +114,7 @@ PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus, fu
     c, path: PW.trackPath(c.shape), laps: c.laps, wet: !!wetStart, everWet: !!wetStart,
     t: 0, sc: null, scCount: 0, leaderLap: 0, finished: false, leaderDone: false,
     radio: [], events: [], flash: {}, speed: 1, paused: false, damageCost: 0, fastest: null,
-    wx: (wx || PW.weatherPlan(c, wetStart)).map(e => ({ ...e })), forecast: null, banner: null, lapPos: [], decision: null, autoPause: true, noPause: false,
+    wx: (wx || PW.weatherPlan(c, wetStart)).map(e => ({ ...e })), forecast: null, banner: null, lapPos: [], decision: null, autoPause: true, noPause: false, slowmo: true, slowUntil: 0, bannerQ: [], bannerLog: {},
   };
   const ideal = PW.idealSetup(c);
   R.cars = grid.map((g, i) => {
@@ -189,10 +189,71 @@ function radio(R, text, kind, car) {
   if (PW.onRadio) PW.onRadio(text, kind);
 }
 
-function banner(R, text, kind) {
-  R.banner = { text, kind: kind || "", at: (typeof performance !== "undefined" ? performance.now() : 0) };
+/* ---------- TV banners: one priority queue ----------
+   P1 crash / safety car / failure / rain / win (also slows the race to 1x)
+   P2 your overtakes, podium fights, fastest lap, final lap
+   P3 other notable moves
+   P4 filler, only in quiet stretches */
+const nowMs = () => (typeof performance !== "undefined" ? performance.now() : 0);
+function banner(R, text, kind, prio) {
+  prio = prio || 3;
+  const now = nowMs(); R.bannerLog = R.bannerLog || {};
+  if (R.bannerLog[text] && now - R.bannerLog[text] < 12000) return; // no repeats
+  R.bannerLog[text] = now;
+  (R.bannerQ = R.bannerQ || []).push({ text, kind: kind || "", prio, at: now });
+  if (prio <= 1) slow(R, 0.4, text);
 }
 PW.banner = banner;
+PW.bannerTick = function (R, order) {
+  const now = nowMs(), q = R.bannerQ = R.bannerQ || [], cur = R.banner;
+  // drop stale low-priority items
+  for (let i = q.length - 1; i >= 0; i--) if (q[i].prio >= 3 && now - q[i].at > 6000) q.splice(i, 1);
+  const shownFor = cur ? now - cur.shownAt : 1e9;
+  q.sort((a, b) => a.prio - b.prio || a.at - b.at);
+  const top = q[0];
+  if (top && (shownFor > 2600 || (cur && top.prio < cur.prio && shownFor > 600))) {
+    q.shift(); R.banner = { ...top, shownAt: now }; R.lastBannerAt = now; return R.banner;
+  }
+  if (cur && shownFor < 3800) return cur;
+  // quiet stretch: a little colour from the commentary box
+  if (!R.sc && !R.finished && R.started && order && now - (R.lastBannerAt || 0) > 11000 && order.length > 3) {
+    R.lastBannerAt = now;
+    const f = filler(R, order);
+    if (f) { R.banner = { text: f, kind: "info", prio: 4, shownAt: now }; return R.banner; }
+  }
+  return cur && shownFor < 3800 ? cur : null;
+};
+function filler(R, order) {
+  const live = order.filter(c => !c.dnf && !c.finished);
+  if (live.length < 3) return null;
+  const lead = live[0], second = live[1], mine = live.filter(c => c.mine);
+  const opts = [];
+  const gap = (second.gapAheadS < 60 ? second.gapAheadS : 0);
+  if (gap > 0) opts.push(gap > 3 ? `${lead.name} leads by ${gap.toFixed(1)}s` : `${second.code} is hunting ${lead.code} for the lead: ${gap.toFixed(1)}s`);
+  const fight = live.slice(1, 10).find(c => c.gapAheadS < 0.8);
+  if (fight) { const ahead = live[live.indexOf(fight) - 1]; opts.push(`Battle for P${ahead.pos}: ${fight.code} is ${fight.gapAheadS.toFixed(1)}s behind ${ahead.code}`); }
+  mine.forEach(m => { const ahead = live[live.indexOf(m) - 1]; if (ahead && m.gapAheadS < 60) opts.push(`${m.name} runs P${m.pos}, ${m.gapAheadS.toFixed(1)}s behind ${ahead.code}`); });
+  const lapsLeft = R.laps - Math.max(0, lead.lapIdx);
+  if (lapsLeft > 1 && lapsLeft <= 5) opts.push(`${lapsLeft} laps to go`);
+  return opts.length ? pick(opts) : null;
+}
+const PASS_LINES = [
+  (a, b) => `${a.name} passes ${b.name}`,
+  (a, b) => `${a.name} dives down the inside of ${b.name}`,
+  (a, b) => `${a.name} sweeps around the outside of ${b.name}`,
+  (a, b) => `${a.code} out-brakes ${b.code}`,
+  (a, b) => `${a.name} gets the run on ${b.name}`,
+  (a, b) => `Wheel to wheel, and ${a.code} wins it from ${b.code}`,
+];
+const passLine = (a, b, pos) => pick(PASS_LINES)(a, b) + (pos <= 10 ? ` for P${pos}` : "");
+
+/* ---------- slow motion: drop to 1x when something matters ---------- */
+function slow(R, laps, why) {
+  if (R.noPause || !R.slowmo || !R.started) return;
+  const until = R.t + laps * R.c.base;
+  if (until > (R.slowUntil || 0)) { R.slowUntil = until; R.slowWhy = why; }
+}
+PW.slow = slow;
 
 /* ---------- decision moments: pause so the player can make the call ---------- */
 function decide(R, kind, title, text, suggest, extra) {
@@ -239,7 +300,7 @@ function onCross(R, car) {
     if (!R.fastest || lt < R.fastest.t) {
       const changed = !R.fastest || R.fastest.code !== car.code;
       R.fastest = { t: lt, code: car.code, team: car.team };
-      if (changed && car.lapIdx >= 4) banner(R, `Fastest lap: ${car.name} ${lt.toFixed(2)}s`, "purple");
+      if (changed && car.lapIdx >= 4) banner(R, `Fastest lap: ${car.name} ${lt.toFixed(2)}s`, "purple", 2);
     }
   }
   car.age++; car.wear += wearPerLap(R, car);
@@ -248,7 +309,7 @@ function onCross(R, car) {
 
   // finish
   if (car.lapIdx >= R.laps || R.leaderDone) {
-    if (!R.leaderDone) { R.leaderDone = true; radio(R, `Chequered flag! ${car.name} wins.`, "flag"); banner(R, `🏁 ${car.name} wins at ${R.c.name}!`, "flag"); }
+    if (!R.leaderDone) { R.leaderDone = true; radio(R, `Chequered flag! ${car.name} wins.`, "flag"); banner(R, `🏁 ${car.name} wins at ${R.c.name}!`, "flag", 1); }
     car.finished = true; car.finishT = R.t;
     if (!R.everWet && new Set(car.used.filter(t => t !== "W")).size < 2) { car.penalty = 20; if (car.mine) radio(R, `${car.code}: 20-second penalty. We only used one tire compound.`, "bad", car); }
     if (car.mine) {
@@ -272,7 +333,7 @@ function onCross(R, car) {
     if (car.issue) failWhat = car.issue.part;
     car.dnf = failWhat || pick(["Engine", "Gearbox", "Hydraulics", "Power unit", "Brakes", "Electrics"]);
     radio(R, car.mine ? `${car.code}: we have a problem. ${car.dnf} failure. Stop the car.` : `${car.name} (${car.teamObj.short}) is out: ${car.dnf.toLowerCase()} failure.`, car.mine ? "bad" : "", car);
-    if (car.mine || car.pos <= 8) banner(R, `Retirement: ${car.name} (${car.dnf.toLowerCase()})`, "bad");
+    if (car.mine || car.pos <= 8) banner(R, `Retirement: ${car.name} (${car.dnf.toLowerCase()})`, "bad", car.mine ? 1 : 2);
     if (Math.random() < 0.25) startSC(R, "Stopped car on track");
     return;
   }
@@ -280,7 +341,7 @@ function onCross(R, car) {
     car.dnf = "Crash";
     if (car.mine) R.damageCost += rand(1, 2.5);
     radio(R, car.mine ? `${car.code} is in the wall! Are you OK? ... Driver is OK, just shaken.` : `Crash! ${car.name} (${car.teamObj.short}) is out.`, car.mine ? "bad" : "", car);
-    banner(R, `Crash! ${car.name} is out`, "bad");
+    banner(R, `Crash! ${car.name} is out`, "bad", 1);
     if (Math.random() < 0.65) startSC(R, "Crash");
     return;
   }
@@ -290,7 +351,7 @@ function onCross(R, car) {
     const part = pick(["Gearbox", "Hydraulics", "Power unit", "Brake-by-wire", "Water pressure", "Fuel pressure"]);
     car.issue = { part, sev: +rand(0.5, 1).toFixed(2), lap: car.lapIdx };
     radio(R, `${car.code}: we're seeing a ${part.toLowerCase()} problem in the data. Stand by.`, "bad", car);
-    banner(R, `${car.name}: ${part.toLowerCase()} problem`, "bad");
+    banner(R, `${car.name}: ${part.toLowerCase()} problem`, "bad", 1);
     decide(R, "issue", `${car.code}: ${part.toLowerCase()} problem`, `The data shows a ${part.toLowerCase()} problem on ${car.name}'s car. It's costing time and could end the race. Box to fix it (about 8 extra seconds in the pits), nurse it home in Save mode (much lower risk), or keep going and hope it holds.`, { [car.id]: R.wet ? "W" : dryFor(R, car) }, { mode: { [car.id]: "save" }, car: car.id });
   }
 
@@ -316,6 +377,8 @@ function onCross(R, car) {
     car.pitTimer = p.loss; car.tyre = tyre; car.wear = 0; car.age = 0; car.stops++; car.wearWarned = false;
     if (car.tel) { car.tel.tyre = 78; car.tel.stuck = 0; }
     if (!car.used.includes(tyre)) car.used.push(tyre);
+    (car.stints = car.stints || [car.used[0]]).push(tyre);
+    if (car.mine) slow(R, 0.25, `${car.code} pit stop`);
     if (car.mine) radio(R, `${car.code} in the pits: ${PW.TYRES[tyre].name}s, ${p.stop.toFixed(1)}s stop.`, "", car);
     if (p.fumble && car.mine) radio(R, p.fumble + ". Wheel gun problem.", "bad", car);
   }
@@ -356,7 +419,7 @@ function teleUpdate(R, car, dt) {
   if (t.fuel <= 0 && !car.finished && !car.dnf) {
     car.dnf = "Out of fuel";
     radio(R, `${car.code}: we're out of fuel. Stop the car. I'm sorry.`, "bad", car);
-    banner(R, `${car.name} has run out of fuel!`, "bad");
+    banner(R, `${car.name} has run out of fuel!`, "bad", 1);
   }
 }
 PW.fuelDelta = (R, car) => car.tel ? car.tel.fuel - Math.max(0, R.laps - Math.max(0, car.lapIdx) - (car.dist - Math.floor(car.dist))) : 0;
@@ -409,7 +472,7 @@ function leaderLap(R, car) {
   R.leaderLap = car.lapIdx;
   if (R.sc) {
     R.sc.left--;
-    if (R.sc.left <= 0) { R.sc = null; radio(R, "Safety car is in this lap. Racing resumes!", "flag"); banner(R, "Green flag. Racing resumes!", "green"); }
+    if (R.sc.left <= 0) { R.sc = null; radio(R, "Safety car is in this lap. Racing resumes!", "flag"); banner(R, "Green flag. Racing resumes!", "green", 2); slow(R, 0.3, "Restart"); }
   } else if (car.lapIdx < R.laps - 2 && Math.random() < 0.003) startSC(R, "Debris on track");
   // weather follows the plan; the radar warns a few laps early
   const re = PW.state().staff.re.rating;
@@ -429,18 +492,18 @@ function leaderLap(R, car) {
       e.done = true; R.wet = e.wet; R.forecast = null;
       const sug = {};
       R.cars.filter(c => c.mine && !c.dnf && !c.finished && !c.pitReq).forEach(c => { if (e.wet && c.tyre !== "W") sug[c.id] = "W"; if (!e.wet && c.tyre === "W") sug[c.id] = dryFor(R, c); });
-      if (e.wet) { R.everWet = true; radio(R, "Rain! It's raining now. Track is getting wet.", "rain"); banner(R, "🌧 Rain is falling", "rain"); decide(R, "rain", "It's raining!", "The track is wet. Cars on slick tires are losing seconds a lap and are much more likely to crash.", sug); }
-      else { radio(R, "Rain has stopped. Track is drying fast.", "rain"); banner(R, "☀ Track drying", "rain"); decide(R, "dry", "Track is drying", "Wet tires overheat and lose time on a dry track. Time to go back to slicks.", sug); }
+      if (e.wet) { R.everWet = true; radio(R, "Rain! It's raining now. Track is getting wet.", "rain"); banner(R, "🌧 Rain is falling", "rain", 1); decide(R, "rain", "It's raining!", "The track is wet. Cars on slick tires are losing seconds a lap and are much more likely to crash.", sug); }
+      else { radio(R, "Rain has stopped. Track is drying fast.", "rain"); banner(R, "☀ Track drying", "rain", 2); decide(R, "dry", "Track is drying", "Wet tires overheat and lose time on a dry track. Time to go back to slicks.", sug); }
     }
   });
-  if (car.lapIdx === R.laps - 1) { radio(R, "Final lap!", "flag"); banner(R, "Final lap!", "flag"); }
+  if (car.lapIdx === R.laps - 1) { radio(R, "Final lap!", "flag"); banner(R, "Final lap!", "flag", 2); slow(R, 0.6, "Final lap"); }
   R.lapPos.push(Object.fromEntries(PW.raceOrder(R).map((x, i) => [x.id, x.dnf ? null : i + 1])));
 }
 function startSC(R, why) {
   if (R.sc || R.leaderLap >= R.laps - 2) return;
   R.sc = { left: 3, why }; R.scCount++;
   radio(R, `SAFETY CAR. ${why}. Cheap pit stop window!`, "sc");
-  banner(R, `Safety car: ${why.toLowerCase()}`, "sc");
+  banner(R, `Safety car: ${why.toLowerCase()}`, "sc", 1);
   const sug = {};
   R.cars.filter(c => c.mine && !c.dnf && !c.finished).forEach(c => { if (R.laps - c.lapIdx > 3 && (c.wear > 0.3 || (!R.everWet && new Set(c.used).size < 2))) sug[c.id] = R.wet ? "W" : dryFor(R, c); });
   decide(R, "sc", "Safety car!", `${why}. The field bunches up, so a stop now costs far less time than usual. Box, or stay out and gain track position?`, sug);
@@ -478,6 +541,7 @@ PW.stepRace = function (R, dt) {
       if (gapS < 0.6) car.dist = ahead.dist - 0.6 / car.lapTime;
       continue;
     }
+    if ((car.mine || ahead.mine) && gapS < 0.6 && (R.battleCd || 0) < R.t && car.lapIdx >= 1) { R.battleCd = R.t + 5 * R.c.base; slow(R, 0.3, `Battle: ${car.code} vs ${ahead.code}`); }
     const effCar = car.lapTime / (car.boost ? BOOST_SPEED : 1), effAhead = ahead.lapTime / (ahead.boost ? BOOST_SPEED : 1);
     if (gapS < 0.55 && effCar < effAhead) {
       const delta = effAhead - effCar;
@@ -487,7 +551,9 @@ PW.stepRace = function (R, dt) {
         R.flash[car.id] = R.t;
         if (car.mine || ahead.mine) R.events.push({ t: R.t, text: `${car.code} passes ${ahead.code}` });
         const forPos = ahead.pos;
-        if (forPos <= 3 || car.mine || ahead.mine) banner(R, `${car.name} passes ${ahead.name}${forPos <= 10 ? ` for P${forPos}` : ""}`, car.mine ? "good" : ahead.mine ? "bad" : "");
+        if (forPos <= 3 || car.mine || ahead.mine) banner(R, passLine(car, ahead, forPos), car.mine ? "good" : ahead.mine ? "bad" : "", car.mine || ahead.mine || forPos <= 3 ? 2 : 3);
+        else if (forPos <= 10 && Math.random() < 0.3) banner(R, passLine(car, ahead, forPos), "", 3);
+        if (car.mine || ahead.mine) slow(R, 0.15, "Overtake");
         if (car.mine && Math.random() < 0.5) radio(R, `${car.code}: great move on ${ahead.code}!`, "good", car);
       } else if (gapS < 0.3) car.dist = ahead.dist - 0.3 / car.lapTime;
     }
@@ -523,7 +589,7 @@ PW.gapText = function (R, car, leader) {
 PW.raceResult = function (R) {
   const order = PW.raceOrder(R);
   return {
-    classified: order.map(c => ({ id: c.id, code: c.code, name: c.name, team: c.team, color: c.color, dnf: c.dnf, mine: c.mine, grid: c.startPos, stops: c.stops, penalty: c.penalty, moraleDelta: c.moraleDelta, best: c.best, gap: PW.gapText(R, c, order[0]) })),
+    classified: order.map(c => ({ stints: c.stints || [c.used[0]], id: c.id, code: c.code, name: c.name, team: c.team, color: c.color, dnf: c.dnf, mine: c.mine, grid: c.startPos, stops: c.stops, penalty: c.penalty, moraleDelta: c.moraleDelta, best: c.best, gap: PW.gapText(R, c, order[0]) })),
     fastest: R.fastest, damageCost: +R.damageCost.toFixed(2), sc: R.scCount, wet: R.everWet,
     lapChart: { laps: R.lapPos, cars: R.cars.map(c => ({ id: c.id, code: c.code, color: c.color, mine: c.mine })) },
   };
