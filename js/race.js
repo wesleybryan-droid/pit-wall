@@ -216,7 +216,7 @@ function onCross(R, car) {
   }
   car.age++; car.wear += wearPerLap(R, car);
   const isLeader = R.cars.filter(x => !x.dnf).every(x => x === car || x.dist <= car.dist);
-  if (isLeader) leaderLap(R, car);
+  if (isLeader && car.lapIdx > R.leaderLap && !R.leaderDone) leaderLap(R, car);
 
   // finish
   if (car.lapIdx >= R.laps || R.leaderDone) {
