@@ -106,7 +106,7 @@ PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx) {
     c, path: PW.trackPath(c.shape), laps: c.laps, wet: !!wetStart, everWet: !!wetStart,
     t: 0, sc: null, scCount: 0, leaderLap: 0, finished: false, leaderDone: false,
     radio: [], events: [], flash: {}, speed: 1, paused: false, damageCost: 0, fastest: null,
-    wx: (wx || PW.weatherPlan(c, wetStart)).map(e => ({ ...e })), forecast: null, banner: null, lapPos: [],
+    wx: (wx || PW.weatherPlan(c, wetStart)).map(e => ({ ...e })), forecast: null, banner: null, lapPos: [], decision: null, autoPause: true, noPause: false,
   };
   const ideal = PW.idealSetup(c);
   R.cars = grid.map((g, i) => {
@@ -175,6 +175,16 @@ function banner(R, text, kind) {
   R.banner = { text, kind: kind || "", at: (typeof performance !== "undefined" ? performance.now() : 0) };
 }
 PW.banner = banner;
+
+/* ---------- decision moments: pause so the player can make the call ---------- */
+function decide(R, kind, title, text, suggest) {
+  if (!R.autoPause || R.noPause || !R.started || R.decision || R.leaderDone) return;
+  const mine = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
+  if (!mine.length) return;
+  R.decision = { kind, title, text, suggest: suggest || {}, at: R.t };
+  R.paused = true;
+}
+function dryFor(R, car) { return bestDryFor(R, car, R.laps - Math.max(0, car.lapIdx)); }
 
 /* ---------- AI pit decisions ---------- */
 function bestDryFor(R, car, remaining) {
@@ -262,7 +272,7 @@ function onCross(R, car) {
   } else tyre = aiPitChoice(R, car);
   if (tyre && R.laps - car.lapIdx >= 1) {
     const p = pitLoss(car);
-    car.pitTimer = p.loss; car.tyre = tyre; car.wear = 0; car.age = 0; car.stops++;
+    car.pitTimer = p.loss; car.tyre = tyre; car.wear = 0; car.age = 0; car.stops++; car.wearWarned = false;
     if (!car.used.includes(tyre)) car.used.push(tyre);
     if (car.mine) radio(R, `${car.code} in the pits: ${PW.TYRES[tyre].name}s, ${p.stop.toFixed(1)}s stop.`, "", car);
     if (p.fumble && car.mine) radio(R, p.fumble + ". Wheel gun problem.", "bad", car);
@@ -275,6 +285,10 @@ function onCross(R, car) {
   }
   // engineer advice for my cars
   if (car.mine) advise(R, car);
+  if (car.mine && !car.wearWarned && car.wear > 0.72 && R.laps - car.lapIdx > 3 && !car.pitReq && car.pitTimer <= 0 && !(car.plan[0] && car.plan[0].lap - car.lapIdx <= 1)) {
+    car.wearWarned = true;
+    decide(R, "tyres", `${car.name}'s tires are fading`, `${Math.round((1 - car.wear) * 100)}% grip left on ${PW.TYRES[car.tyre].name}s with ${R.laps - car.lapIdx} laps to go${car.plan[0] ? `. The plan says box on lap ${car.plan[0].lap}` : ""}. Lap times fall off a cliff when the tires run out. Box now, or save them?`, { [car.id]: R.wet ? "W" : dryFor(R, car) });
+  }
   car.lapTime = lapTimeFor(R, car);
 }
 function advise(R, car) {
@@ -302,12 +316,19 @@ function leaderLap(R, car) {
       e.warned = true;
       const err = Math.round(gauss() * (100 - re) / 30), est = Math.max(1, e.lap - car.lapIdx + err);
       R.forecast = { wet: e.wet, lap: car.lapIdx + est };
+      const sug = {};
+      if (e.wet) R.cars.filter(c => c.mine && !c.dnf && !c.finished && c.tyre !== "W").forEach(c => sug[c.id] = "W");
+      decide(R, "radar", e.wet ? "Rain on the radar" : "Rain clearing", e.wet
+        ? `Your engineer expects rain in about ${est} lap${est > 1 ? "s" : ""} (around lap ${car.lapIdx + est}). Box for wets just as it arrives: too early and you lose about 4s a lap, too late and slicks are slow and risky.`
+        : `The radar says the rain stops in about ${est} lap${est > 1 ? "s" : ""}. Plan the switch back to slicks.`, e.wet ? {} : sug);
       radio(R, e.wet ? `Radar: rain is coming. Expect it in about ${est} lap${est > 1 ? "s" : ""}. Plan the switch to wets.` : `Radar: the rain is clearing. Track should dry in about ${est} lap${est > 1 ? "s" : ""}.`, "rain");
     }
     if (car.lapIdx === e.lap && !e.done) {
       e.done = true; R.wet = e.wet; R.forecast = null;
-      if (e.wet) { R.everWet = true; radio(R, "Rain! It's raining now. Track is getting wet.", "rain"); banner(R, "🌧 Rain is falling", "rain"); }
-      else { radio(R, "Rain has stopped. Track is drying fast.", "rain"); banner(R, "☀ Track drying", "rain"); }
+      const sug = {};
+      R.cars.filter(c => c.mine && !c.dnf && !c.finished && !c.pitReq).forEach(c => { if (e.wet && c.tyre !== "W") sug[c.id] = "W"; if (!e.wet && c.tyre === "W") sug[c.id] = dryFor(R, c); });
+      if (e.wet) { R.everWet = true; radio(R, "Rain! It's raining now. Track is getting wet.", "rain"); banner(R, "🌧 Rain is falling", "rain"); decide(R, "rain", "It's raining!", "The track is wet. Cars on slick tires are losing seconds a lap and are much more likely to crash.", sug); }
+      else { radio(R, "Rain has stopped. Track is drying fast.", "rain"); banner(R, "☀ Track drying", "rain"); decide(R, "dry", "Track is drying", "Wet tires overheat and lose time on a dry track. Time to go back to slicks.", sug); }
     }
   });
   if (car.lapIdx === R.laps - 1) { radio(R, "Final lap!", "flag"); banner(R, "Final lap!", "flag"); }
@@ -318,6 +339,9 @@ function startSC(R, why) {
   R.sc = { left: 3, why }; R.scCount++;
   radio(R, `SAFETY CAR. ${why}. Cheap pit stop window!`, "sc");
   banner(R, `Safety car: ${why.toLowerCase()}`, "sc");
+  const sug = {};
+  R.cars.filter(c => c.mine && !c.dnf && !c.finished).forEach(c => { if (R.laps - c.lapIdx > 3 && (c.wear > 0.3 || (!R.everWet && new Set(c.used).size < 2))) sug[c.id] = R.wet ? "W" : dryFor(R, c); });
+  decide(R, "sc", "Safety car!", `${why}. The field bunches up, so a stop now costs far less time than usual. Box, or stay out and gain track position?`, sug);
 }
 
 /* ---------- step the simulation ---------- */
@@ -411,7 +435,7 @@ PW.swapCars = R => {
 };
 
 /* ---------- headless run (for testing and "sim to end") ---------- */
-PW.runToEnd = function (R) { let guard = 0; while (!R.finished && guard++ < 200000) PW.stepRace(R, 0.25); };
+PW.runToEnd = function (R) { let guard = 0; R.noPause = true; R.decision = null; R.paused = false; while (!R.finished && guard++ < 200000) PW.stepRace(R, 0.25); };
 
 /* ---------- drawing ---------- */
 function drawCar(ctx, x, y, heading, L, color, mine) {

@@ -24,10 +24,10 @@ const STEPS = [
   { screen: "quali", sel: ".qmode", title: "Qualifying", text: "Pick an engine mode, then run qualifying. <b>Max attack</b> is a little faster but strains the engine for the race. Check the <b>weather radar</b> below: if rain is likely, plan for it." },
   { screen: "strategy", sel: ".gridlist", title: "The starting grid", text: "Here's where everyone starts, with the gap to pole position. Your cars are outlined." },
   { screen: "strategy", sel: ".card.team .choice", title: "Choose a strategy", text: "Soft tires are fast but wear out quickly. Mediums are balanced. Hards last longest. Wets are only for rain. Your engineer marks his pick. In a dry race you <b>must use two different compounds</b> or get a 20-second penalty. Pick a plan for each car, then hit <b>Lights out</b>." },
-  { screen: "race", sel: ".mapwrap", race: true, title: "The race is on", text: "Each dot is a car. Yours are outlined in white with their names. Use the speed buttons at the top to watch at 1× to 8×, or pause with the space bar." },
+  { screen: "race", sel: ".mapwrap", race: true, title: "The race is on", text: "Each car is drawn in its team color. Yours glow white and show their names. 1× is about 6 seconds a lap. Speed up with the buttons at the top, or pause with the space bar. With <b>Auto-pause</b> on, the race stops by itself whenever there's a call to make." },
   { screen: "race", sel: ".tower", race: true, title: "Timing tower", text: "Positions, the gap to the leader and each car's current tire. PIT means a car is stopping, and OUT means it has retired." },
   { screen: "race", sel: ".carctl", race: true, title: "Your controls", text: "The <b>tire bar</b> shows grip left. <b>Push</b> is faster but wears tires and the engine, and <b>Save tires</b> makes them last. Tap a tire under <b>Box for</b> to pit at the end of the lap. Your planned stops happen on their own unless you change them." },
-  { screen: "race", sel: ".radio", race: true, title: "Listen to the radio", text: "Your engineer calls out worn tires, rain and safety cars. A <b>safety car</b> bunches the field, which makes it the cheapest time to pit. When rain arrives, box for wets fast.", next: { label: "Start racing ›", go: () => { const R = PW.ui.R; if (R) R.paused = false; } } },
+  { screen: "race", sel: ".radio", race: true, title: "Listen to the radio", text: "Your engineer calls out worn tires, rain and safety cars. A <b>safety car</b> bunches the field, which makes it the cheapest time to pit. When rain arrives, box for wets fast.", next: { label: "Start racing ›", go: () => { const R = PW.ui.R; if (R) R.paused = !!R.decision; } } },
   { screen: "results", sel: ".podium", title: "After the race", text: "Points, prize money, finished research and driver morale all update here. That's the whole loop: upgrade, hire, race, repeat. Get from the back of the grid to the championship. Good luck!", done: "Let's go" },
 ];
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
@@ -95,7 +95,7 @@ function place(el) {
 }
 card.addEventListener("click", e => {
   const b = e.target.closest("[data-c]"); if (!b) return;
-  if (b.dataset.c === "skip") { const R = PW.ui.R; if (R) R.paused = false; finish(); }
+  if (b.dataset.c === "skip") { const R = PW.ui.R; if (R) R.paused = !!R.decision; finish(); }
   else advance();
 });
 PW.afterRender = () => { showing = -1; check(); };
@@ -132,7 +132,8 @@ const GUIDE = `
 <li><b>Box for (tire):</b> the car pits at the end of the lap and fits that tire. Tap it again to cancel.</li>
 <li><b>Save tires / Balanced / Push:</b> pushing is faster but wears tires and raises breakdown risk.</li>
 <li><b>Team orders:</b> when your cars run nose to tail, you can swap them. The demoted driver won't like it.</li>
-<li><b>Speed:</b> 1× to 8×, pause (space bar), or ⏭ to skip to the finish.</li>
+<li><b>Speed:</b> 1× (about 6 seconds a lap) to 8×, pause (space bar), or ⏭ to skip to the finish.</li>
+<li><b>Auto-pause:</b> on by default. The race freezes for safety cars, rain on the radar, rain arriving or clearing, and fading tires. Tap a tire to box (green ring = engineer's suggestion), then <b>Keep racing</b>.</li>
 </ul>
 <h3>Things that change races</h3>
 <ul>

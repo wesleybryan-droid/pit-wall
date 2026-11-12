@@ -371,8 +371,8 @@ function renderRace() {
   const c = R.c;
   app.innerHTML = `<div class="race">
     <div class="rbar"><div class="lap num" id="rLap"></div><div id="rFlag"></div>
-      <div class="speed">${[["pause", "❚❚"], [1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]].map(([v, l]) => `<button class="btn sm" data-pd="speed" data-v="${v}" id="sp-${v}">${l}</button>`).join("")}<button class="btn sm" data-pd="simend" title="Skip to the finish">⏭</button><button class="iconbtn" data-pd="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-pd="guide" title="How to play">?</button></div></div>
-    <div class="mapwrap"><canvas id="map"></canvas><div class="tvbanner" id="rBanner"></div><div class="lights" id="lights">${R.started ? "" : `<div class="rig">${"<i></i>".repeat(5)}</div>`}</div></div>
+      <div class="speed">${[["pause", "❚❚"], [1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]].map(([v, l]) => `<button class="btn sm" data-pd="speed" data-v="${v}" id="sp-${v}">${l}</button>`).join("")}<button class="btn sm" data-pd="simend" title="Skip to the finish">⏭</button><button class="btn sm" data-pd="autopause" id="apBtn" title="Pause automatically when there's a decision to make"></button><button class="iconbtn" data-pd="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-pd="guide" title="How to play">?</button></div></div>
+    <div class="mapwrap"><canvas id="map"></canvas><div class="tvbanner" id="rBanner"></div><div id="rDecision"></div><div class="lights" id="lights">${R.started ? "" : `<div class="rig">${"<i></i>".repeat(5)}</div>`}</div></div>
     <div class="tower"><div class="hd" data-pd="gapmode" title="Tap to switch between gap to leader and interval to car ahead"><span id="rGapMode"></span><span id="rWeather"></span></div><div id="tower"></div></div>
     <div class="ctl" id="ctl"></div>
     <div class="radio" id="radio"></div>
@@ -384,9 +384,9 @@ function renderRace() {
     raf = requestAnimationFrame(loop);
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
     if (R.started && !R.paused && !R.finished) {
-      const simDt = dt * R.speed * (c.base / 3);
+      const simDt = dt * R.speed * (c.base / 6); // 1x is about 6 seconds a lap
       const n = Math.ceil(simDt / 0.5);
-      for (let i = 0; i < n; i++) PW.stepRace(R, simDt / n);
+      for (let i = 0; i < n; i++) { PW.stepRace(R, simDt / n); if (R.paused) break; }
       Snd.humRate(R.speed);
     }
     PW.drawTrack(document.getElementById("map"), R);
@@ -418,6 +418,9 @@ function updateRaceDom(full) {
   set("rFlag", R.sc ? `<span class="flag sc">Safety car</span>` : R.wet ? `<span class="flag rain">Wet track</span>` : R.leaderDone ? `<span class="flag green">Chequered flag</span>` : "");
   set("rWeather", (R.wet ? "🌧 Wet" : "☀ Dry") + (R.forecast ? (R.forecast.wet ? ` · rain ~L${R.forecast.lap}` : ` · drying ~L${R.forecast.lap}`) : ""));
   set("rGapMode", W.gapMode === "leader" ? "Gap to leader ⇄" : "Interval ⇄");
+  set("apBtn", R.autoPause ? "Auto-pause on" : "Auto-pause off");
+  const ap = document.getElementById("apBtn"); if (ap) ap.classList.toggle("on", R.autoPause);
+  set("rDecision", decisionCard());
   const bn = document.getElementById("rBanner");
   if (bn) {
     const on = R.banner && performance.now() - R.banner.at < 3800;
@@ -449,6 +452,21 @@ function updateRaceDom(full) {
 }
 PW.onRadio = (text, kind) => { Snd.radio(); };
 
+function autoPausePref() { try { return localStorage.getItem("pitwall-autopause") !== "off"; } catch (e) { return true; } }
+function decisionCard() {
+  const d = R.decision;
+  if (!d) return "";
+  const cars = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
+  const rows = cars.map(car => {
+    const grip = Math.max(0, Math.round((1 - car.wear) * 100));
+    return `<div class="drow"><div class="dcar"><b>P${car.pos} ${car.code}</b><span>${tyre(car.tyre)} ${grip}% grip${car.pitTimer > 0 ? " · in pits" : ""}</span></div>
+      <div class="dbtns">${["S", "M", "H", "W"].map(t => `<button class="tbtn ${car.pitReq === t ? "sel" : ""} ${d.suggest[car.id] === t ? "sug" : ""}" data-pd="box" data-v="${car.id}" data-t="${t}" title="Box for ${PW.TYRES[t].name}s">${tyre(t)}</button>`).join("")}
+      <button class="btn sm ${car.pitReq ? "" : "on"}" data-pd="cancelbox" data-v="${car.id}">Stay out</button></div>
+      <div class="dnote">${car.pitReq ? `<b class="warn">Boxing for ${PW.TYRES[car.pitReq].name}s at the end of this lap</b>` : d.suggest[car.id] ? `Engineer suggests: box for ${PW.TYRES[d.suggest[car.id]].name}s` : "Engineer: stay out"}</div></div>`;
+  }).join("");
+  return `<div class="decision ${d.kind}"><div class="dtag">Decision · race paused</div><h4>${esc(d.title)}</h4><p>${esc(d.text)}</p>${rows}
+    <div class="dfoot"><button class="btn primary" data-pd="dresume">Keep racing ▶</button><span class="muted">Tap a tire to box for it.</span></div></div>`;
+}
 function intervalText(R, car, ahead, leader) {
   if (car.dnf) return "OUT";
   if (ahead.dnf) return PW.gapText(R, car, leader);
@@ -560,7 +578,7 @@ app.addEventListener("click", e => {
     case "setup": W.setup = v; Snd.click(); render(); break;
     case "runquali": W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup); W.step = "grid"; W.animGrid = true; Snd.go(); render(); break;
     case "plan": W.plans[v] = W.presets.find(p => p.id === el.dataset.p); Snd.click(); render(); break;
-    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx); W.step = "race"; window.scrollTo(0, 0); render(); break;
+    case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx); R.autoPause = autoPausePref(); W.step = "race"; window.scrollTo(0, 0); render(); break;
     case "leave": W = null; tab = "hq"; render(); window.scrollTo(0, 0); break;
     case "nextseason": { const renew = [...document.querySelectorAll(".renew:checked")].map(x => x.value); PW.finishSeason(renew); tab = "hq"; render(); window.scrollTo(0, 0); break; }
   }
@@ -573,7 +591,9 @@ app.addEventListener("pointerdown", e => {
   switch (a) {
     case "guide": PW.openGuide(); return;
     case "gapmode": W.gapMode = W.gapMode === "leader" ? "interval" : "leader"; updateRaceDom(true); return;
-    case "speed": if (v === "pause") R.paused = !R.paused; else { R.speed = +v; R.paused = false; } break;
+    case "speed": if (v === "pause") R.paused = !R.paused; else { R.speed = +v; R.paused = false; } if (!R.paused) R.decision = null; break;
+    case "dresume": R.decision = null; R.paused = false; break;
+    case "autopause": R.autoPause = !R.autoPause; try { localStorage.setItem("pitwall-autopause", R.autoPause ? "on" : "off"); } catch (e) {} if (!R.autoPause && R.decision) { R.decision = null; R.paused = false; } break;
     case "simend": if (!R.started) return; PW.runToEnd(R); break;
     case "sound": Snd.toggle(); if (Snd.on && R.started && !R.finished) Snd.humStart(); el.textContent = Snd.on ? "🔊" : "🔇"; break;
     case "mode": PW.setMode(R, car, el.dataset.m); break;
@@ -587,7 +607,7 @@ app.addEventListener("pointerdown", e => {
 });
 document.addEventListener("keydown", e => {
   if (!R || e.target.tagName === "INPUT") return;
-  if (e.key === " ") { e.preventDefault(); R.paused = !R.paused; updateRaceDom(true); }
+  if (e.key === " ") { e.preventDefault(); R.paused = !R.paused; if (!R.paused) R.decision = null; updateRaceDom(true); }
 });
 window.addEventListener("resize", () => { const cv = document.getElementById("preview"); if (cv && !W) PW.drawTrack(cv, { path: PW.trackPath(PW.circuit().shape), wet: false }, { static: true }); });
 

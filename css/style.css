@@ -275,3 +275,24 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 .tvb.good{border-left-color:var(--green)} .tvb.bad{border-left-color:var(--red)} .tvb.sc{border-left-color:var(--amber);color:var(--amber)} .tvb.rain{border-left-color:var(--blue)} .tvb.purple{border-left-color:var(--purple);color:#d9b8ff} .tvb.flag{border-left-color:#fff} .tvb.green{border-left-color:var(--green);color:var(--green)}
 @keyframes tvin{from{transform:translateX(-30px);opacity:0}to{transform:none;opacity:1}}
 .tower .hd[data-pd]{cursor:pointer}
+
+/* decision card (auto-pause) */
+#rDecision{position:absolute;inset:0;display:grid;place-items:center;padding:14px;pointer-events:none;z-index:4}
+#rDecision:empty{display:none}
+.decision{pointer-events:auto;background:rgba(17,20,27,.96);border:1px solid var(--line2);border-top:4px solid var(--amber);border-radius:14px;padding:16px 18px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);animation:tvin .25s ease-out;max-height:100%;overflow:auto}
+.decision.rain,.decision.radar,.decision.dry{border-top-color:var(--blue)} .decision.tyres{border-top-color:var(--red)}
+.decision .dtag{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--amber);font-weight:700}
+.decision h4{margin:4px 0 6px;font-size:22px;font-weight:900;text-transform:uppercase}
+.decision p{margin:0 0 12px;font-size:14px;color:#c9d1dd}
+.drow{background:var(--bg2);border-radius:10px;padding:10px;margin-bottom:8px}
+.dcar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.dcar span{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.dbtns{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dbtns .tbtn{border:0;background:none;padding:0;cursor:pointer;border-radius:50%}
+.dbtns .tbtn .tyre{width:34px;height:34px;font-size:13px}
+.dbtns .tbtn.sug{box-shadow:0 0 0 2px var(--green)}
+.dbtns .tbtn.sel .tyre{box-shadow:0 0 0 3px #fff}
+.dbtns .btn{margin-left:auto}
+.dnote{font-size:12px;color:var(--muted);margin-top:6px}
+.dfoot{display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap}
+@media (max-width:640px){#rDecision{position:fixed;inset:auto 0 0 0;padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:60;display:block}.decision{max-height:72vh;max-width:none;border-radius:14px}.decision h4{font-size:18px}.decision{padding:12px}}
