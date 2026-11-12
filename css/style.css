@@ -347,3 +347,11 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 .dtele{font-size:12px;color:var(--muted);margin-top:6px}
 .decision.hot,.decision.brakes,.decision.engine{border-top-color:var(--red)} .decision.fuel{border-top-color:var(--amber)} .decision.cold{border-top-color:var(--blue)} .decision.undercut,.decision.undercutGo{border-top-color:var(--purple)}
 @media (max-width:640px){.tele{grid-template-columns:repeat(2,1fr)}}
+
+/* backups */
+.warnbox{background:rgba(255,176,0,.1);border:1px solid rgba(255,176,0,.45);color:#ffd27a;border-radius:10px;padding:10px 12px;font-size:13px;margin:0 0 12px}
+.codebox{width:100%;margin-top:10px;background:var(--bg2);border:1px solid var(--line2);color:var(--text);border-radius:8px;padding:8px;font:12px ui-monospace,Menlo,monospace;resize:vertical}
+.bmsg.good{color:var(--green)} .bmsg.bad{color:var(--red)}
+
+.issuetag{color:#ff8088;font-weight:700}
+.decision.issue{border-top-color:var(--red)}

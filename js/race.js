@@ -129,7 +129,7 @@ PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus, fu
       tyre: start, used: [start], age: 0, wear: 0, stops: 0, pitTimer: 0, pitReq: null,
       plan: plan ? plan.stops.map(s => ({ ...s })) : [], mode: "normal", grid: i + 1,
       dnf: null, finished: false, finishT: 0, penalty: 0, aiThresh: rand(0.78, 0.98), strain: g.mine && qualiMode === "max" ? 1.3 : 1,
-      moraleDelta: 0, pos: i + 1, startPos: i + 1, ers: 100, boost: false, gapAheadS: 99,
+      moraleDelta: 0, pos: i + 1, startPos: i + 1, ers: 100, boost: false, gapAheadS: 99, frag: team.player ? (S.fragility || 0) : 0, issue: null,
       tel: team.player ? { tyre: 84, brake: 520, engine: 96, fuel: c.laps + (FUEL_PLANS[fuel] || FUEL_PLANS.std).margin, aheadHist: [], behindHist: [], cd: {}, stuck: 0 } : null,
       wearMul: team.player ? (bonus.wearMul || 1) : 1, failMul: team.player ? (bonus.failMul || 1) : 1, perfBonus: team.player ? (bonus.perf || 0) : 0,
     };
@@ -151,6 +151,7 @@ function lapTimeFor(R, car) {
   t += PW.TYRES[car.tyre].pace;
   const w = car.wear; t += 2.6 * w * w + (w > 1 ? (w - 1) * 8 : 0);
   t += 0.045 * (car.tel ? Math.max(0, car.tel.fuel) : Math.max(0, R.laps - Math.max(0, car.lapIdx)));
+  if (car.issue) t += 0.3 * car.issue.sev;
   if (car.tel) {
     const T = car.tel.tyre, E = car.tel.engine;
     if (T < 80) t += (80 - T) * 0.035; else if (T > 110) t += (T - 110) * 0.08; else if (T >= 94 && T <= 106) t -= 0.1;
@@ -266,7 +267,9 @@ function onCross(R, car) {
     if (car.tel.engine > 125) { fail += (car.tel.engine - 125) * 0.0008; failWhat = "Engine overheating"; }
   }
   const crash = 0.0004 + (100 - car.d.consistency) * 0.00002 + (R.wet ? (car.tyre === "W" ? 0.0015 : 0.012) : 0) + (car.mode === "push" ? 0.0015 : 0) + (car.wear > 1.1 ? 0.02 : 0);
+  if (car.issue) fail += 0.06 * car.issue.sev * (car.mode === "save" ? 0.4 : car.mode === "push" ? 1.5 : 1);
   if (Math.random() < fail) {
+    if (car.issue) failWhat = car.issue.part;
     car.dnf = failWhat || pick(["Engine", "Gearbox", "Hydraulics", "Power unit", "Brakes", "Electrics"]);
     radio(R, car.mine ? `${car.code}: we have a problem. ${car.dnf} failure. Stop the car.` : `${car.name} (${car.teamObj.short}) is out: ${car.dnf.toLowerCase()} failure.`, car.mine ? "bad" : "", car);
     if (car.mine || car.pos <= 8) banner(R, `Retirement: ${car.name} (${car.dnf.toLowerCase()})`, "bad");
@@ -280,6 +283,15 @@ function onCross(R, car) {
     banner(R, `Crash! ${car.name} is out`, "bad");
     if (Math.random() < 0.65) startSC(R, "Crash");
     return;
+  }
+
+  // mechanical issues: bold, unproven parts make them more likely
+  if (car.mine && !car.issue && car.lapIdx >= 2 && R.laps - car.lapIdx > 2 && Math.random() < 0.0008 + Math.min(car.frag, 6) * 0.0018) {
+    const part = pick(["Gearbox", "Hydraulics", "Power unit", "Brake-by-wire", "Water pressure", "Fuel pressure"]);
+    car.issue = { part, sev: +rand(0.5, 1).toFixed(2), lap: car.lapIdx };
+    radio(R, `${car.code}: we're seeing a ${part.toLowerCase()} problem in the data. Stand by.`, "bad", car);
+    banner(R, `${car.name}: ${part.toLowerCase()} problem`, "bad");
+    decide(R, "issue", `${car.code}: ${part.toLowerCase()} problem`, `The data shows a ${part.toLowerCase()} problem on ${car.name}'s car. It's costing time and could end the race. Box to fix it (about 8 extra seconds in the pits), nurse it home in Save mode (much lower risk), or keep going and hope it holds.`, { [car.id]: R.wet ? "W" : dryFor(R, car) }, { mode: { [car.id]: "save" }, car: car.id });
   }
 
   // pit stops
@@ -300,6 +312,7 @@ function onCross(R, car) {
   }
   if (tyre && R.laps - car.lapIdx >= 1) {
     const p = pitLoss(car);
+    if (car.issue) { p.loss += 8; radio(R, `${car.code}: the crew fixed the ${car.issue.part.toLowerCase()} problem. Clean car again.`, "good", car); car.issue = null; }
     car.pitTimer = p.loss; car.tyre = tyre; car.wear = 0; car.age = 0; car.stops++; car.wearWarned = false;
     if (car.tel) { car.tel.tyre = 78; car.tel.stuck = 0; }
     if (!car.used.includes(tyre)) car.used.push(tyre);

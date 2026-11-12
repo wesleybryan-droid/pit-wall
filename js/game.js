@@ -37,7 +37,7 @@ PW.newCareer = function (teamName, color) {
     research: { active: [], tier: Object.fromEntries(PW.AREAS.map(a => [a.id, 0])) },
     sponsors: [], sponsorOffers: [], staffMarket: null, mods: { wearMul: 1, capCut: 0, aiDev: 1 }, ruleNote: "",
     news: [], lastResult: null, history: [], over: false, phase: "hq",
-    board: { target: 9, conf: 60 }, trophies: {},
+    board: { target: 9, conf: 60 }, trophies: {}, fragility: 0,
   };
   // two starter sponsors so the first races pay something
   S.sponsors.push(makeSponsor(0.9), makeSponsor(0.7));
@@ -52,9 +52,9 @@ function news(msg, kind) { S.news.unshift({ msg, kind: kind || "", season: S.sea
 PW.news = news;
 
 /* ---------- save / load ---------- */
-PW.save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} };
+PW.save = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} if (PW.protectStorage) PW.protectStorage(); };
 PW.load = () => { try { const t = localStorage.getItem(SAVE_KEY); if (t) { S = JSON.parse(t); upgradeSave(); return S; } } catch (e) {} return null; };
-function upgradeSave() { if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
+function upgradeSave() { if (S.fragility == null) S.fragility = 0; if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
 PW.wipe = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = null; };
 
 /* ---------- lookups ---------- */
@@ -86,13 +86,20 @@ PW.projectFor = function (area, opt) {
   const base = tier < 3 ? PW.PROJECTS[tier][opt] : (opt === "safe" ? PW.REFINE : null);
   if (!base) return null;
   const name = tier < 3 ? PW.PROJECT_NAMES[area][tier][opt === "safe" ? 0 : 1] : "Refinement package";
+  // outcomes are a range, not a promise: a better department head narrows it,
+  // and gains shrink as a rating nears the ceiling
+  const prec = clamp((head - 40) / 60, 0, 0.9);
+  const mid = base.gain * (0.75 + head / 200) * PW.dim(S.teams.you.car[area]);
+  const lo = mid * (opt === "bold" ? 0.35 + 0.25 * prec : 0.55 + 0.3 * prec);
+  const hi = mid * (opt === "bold" ? 1.5 - 0.1 * prec : 1.25 - 0.1 * prec);
   return {
     area, tier, opt, name, cost: base.cost,
     races: Math.max(1, Math.round(base.races * (1.25 - td / 200))),
-    gain: +(base.gain * (0.75 + head / 200)).toFixed(1),
+    lo: +lo.toFixed(1), hi: +hi.toFixed(1), gain: +((lo + hi) / 2).toFixed(1),
     risk: base.risk ? +clamp(base.risk * (1.3 - head / 100), 0.05, 0.6).toFixed(2) : 0,
   };
 };
+PW.dim = r => clamp(1 - (r - 70) / 30, 0.25, 1);
 PW.canStart = function (p) {
   if (!p) return "Not available";
   if (S.research.active.some(a => a.area === p.area)) return "Already researching this area";
@@ -117,15 +124,19 @@ function advanceResearch(report) {
     if (p.left > 0) return;
     done.push(p);
     const area = PW.AREAS.find(a => a.id === p.area).name;
+    if (p.opt === "bold") S.fragility = +((S.fragility || 0) + (p.risk && Math.random() < p.risk ? 0.5 : 1)).toFixed(1);
     if (p.risk && Math.random() < p.risk) {
       if (p.area === "engine" || p.area === "aero") S.teams.you.car.rel = Math.max(40, S.teams.you.car.rel - 2);
       news(`${p.name} failed in testing. No gain${p.area === "engine" || p.area === "aero" ? ", and reliability took a hit" : ""}.`, "bad");
       report.push({ kind: "bad", text: `${p.name} failed (${area})` });
     } else {
-      S.teams.you.car[p.area] = Math.min(99, +(S.teams.you.car[p.area] + p.gain).toFixed(1));
+      const got = +rand(p.lo != null ? p.lo : p.gain, p.hi != null ? p.hi : p.gain).toFixed(1);
+      S.teams.you.car[p.area] = Math.min(99, +(S.teams.you.car[p.area] + got).toFixed(1));
+      if (p.area === "rel") S.fragility = Math.max(0, +((S.fragility || 0) - 1.5).toFixed(1));
       if (p.tier < 3) S.research.tier[p.area] = p.tier + 1;
-      news(`${p.name} delivered: ${area} +${p.gain}.`, "good");
-      report.push({ kind: "good", text: `${p.name}: ${area} +${p.gain}` });
+      const verdict = p.hi != null && got >= p.hi - (p.hi - p.lo) * 0.25 ? " Better than expected!" : p.lo != null && got <= p.lo + (p.hi - p.lo) * 0.25 ? " At the low end of the forecast." : "";
+      news(`${p.name} delivered: ${area} +${got} (forecast +${p.lo}–${p.hi}).${verdict}`, "good");
+      report.push({ kind: "good", text: `${p.name}: ${area} +${got} (forecast +${p.lo}–${p.hi})` });
     }
   });
   S.research.active = S.research.active.filter(p => !done.includes(p));
@@ -134,9 +145,23 @@ function rivalsDevelop() {
   Object.values(S.teams).forEach(t => {
     if (t.player) return;
     const budget = t.dev * S.mods.aiDev;
-    const a = pick(PW.AREAS).id;
-    if (a === "engine" && S.mods.engineFreeze) return;
-    t.car[a] = Math.min(99, +(t.car[a] + rand(0, 0.9) * budget).toFixed(1));
+    for (let k = 0; k < 2; k++) {
+      const a = pick(PW.AREAS).id;
+      if (a === "engine" && S.mods.engineFreeze) continue;
+      t.car[a] = Math.min(99, +(t.car[a] + rand(0.8, 2.2) * budget * PW.dim(t.car[a])).toFixed(1));
+    }
+  });
+  // rivals study the best car in each area and copy what they can
+  PW.AREAS.forEach(({ id, name }) => {
+    if (id === "engine" && S.mods.engineFreeze) return;
+    const leader = Object.values(S.teams).reduce((b, t) => t.car[id] > b.car[id] ? t : b);
+    let copied = 0;
+    Object.values(S.teams).forEach(t => {
+      if (t.player || t === leader) return;
+      const gap = leader.car[id] - t.car[id];
+      if (gap > 3 && Math.random() < 0.2) { t.car[id] = +(t.car[id] + Math.min(1.2, gap * 0.09) * rand(0.5, 1)).toFixed(1); copied++; }
+    });
+    if (leader.player && copied >= 2 && Math.random() < 0.35) news(`Rivals are copying your ${name.toLowerCase()} concept. Your advantage there is shrinking.`, "bad");
   });
 }
 
@@ -275,6 +300,7 @@ PW.applyRace = function (res) {
   report.net = +lines.reduce((a, l) => a + l[1], 0).toFixed(2);
   report.trophies = raceTrophies(res);
   advanceResearch(report.research);
+  S.fragility = Math.max(0, +((S.fragility || 0) - 0.15).toFixed(2));
   rivalsDevelop();
   S.lastResult = { ...res, report }; delete S.lastResult.lapChart;
   S.history.push({ season: S.season, round: S.round, circuit: c.name, mine: mine.map(e => ({ code: e.code, pos: e.pos, dnf: e.dnf })) });
@@ -473,7 +499,15 @@ function ruleChange() {
 }
 
 /* ---------- season end ---------- */
+const REG_THEMES = [
+  { area: "aero",    name: "Aero overhaul",        text: "All-new aerodynamic rules. Aero ratings reset hardest, and whoever was best at aero loses the most. Some teams will nail the new rules, some won't." },
+  { area: "engine",  name: "New power unit formula", text: "A new engine formula. Engine ratings reset hardest. Expect surprises on the fast tracks." },
+  { area: "chassis", name: "Chassis and suspension rules", text: "New suspension and floor rules. Chassis ratings reset hardest. Street circuits could look very different." },
+  { area: "tyre",    name: "New tire supplier",    text: "A new tire supplier arrives. Tire-wear ratings reset hardest, and strategies will change." },
+];
+function pickRegs() { const opts = REG_THEMES.filter(t => !S.lastRegs || t.area !== S.lastRegs); return pick(opts); }
 PW.seasonSummary = function () {
+  if (!S.nextRegs) { S.nextRegs = pickRegs(); PW.save(); }
   const st = PW.standings();
   const pos = st.findIndex(t => t.id === "you") + 1;
   const prize = PW.PRIZE[pos - 1];
@@ -487,7 +521,7 @@ PW.seasonSummary = function () {
   const met = pos <= b.target, miss = pos - b.target;
   const confDelta = met ? 20 : miss >= 3 ? -35 : -15;
   const board = { target: b.target, met, bonus: met ? 8 : 0, confBefore: b.conf, conf: clamp(b.conf + confDelta, 0, 100), fired: !met && b.conf + confDelta <= 0, next: clamp(met ? pos - 2 : pos - 1, 1, 9) };
-  return { st, pos, prize, beat, champ, expiring, board };
+  return { st, pos, prize, beat, champ, expiring, board, regs: S.nextRegs };
 };
 PW.finishSeason = function (renew) {
   const sum = PW.seasonSummary();
@@ -538,14 +572,22 @@ PW.finishSeason = function (renew) {
     Object.assign(fa, { team: "you", role: slot, contract: 1, salary: PW.driverSalary(fa) });
     news(`${fa.name} fills an empty seat on a one-year deal.`);
   });
-  // new regulations: everyone regresses toward the middle
-  Object.values(S.teams).forEach(t => { PW.AREAS.forEach(a => t.car[a.id] = +(t.car[a.id] + (72 - t.car[a.id]) * 0.25).toFixed(1)); t.points = 0; });
+  // new regulations: one area is rewritten (a lottery), the rest drift toward the middle
+  const regs = S.nextRegs || pickRegs();
+  Object.values(S.teams).forEach(t => {
+    PW.AREAS.forEach(a => {
+      const v = t.car[a.id];
+      t.car[a.id] = +(a.id === regs.area ? 70 + (v - 72) * 0.35 + rand(-4, 4) : v + (72 - v) * (a.id === "rel" ? 0.2 : 0.15)).toFixed(1);
+    });
+    t.points = 0;
+  });
+  S.lastRegs = regs.area; S.nextRegs = null; S.fragility = +((S.fragility || 0) / 2).toFixed(1);
   S.research = { active: [], tier: Object.fromEntries(PW.AREAS.map(a => [a.id, 0])) };
   S.mods = { wearMul: 1, capCut: 0, aiDev: 1 }; S.ruleNote = ""; S.pendingRule = null;
   S.sponsors = S.sponsors.filter(() => false);
   S.season++; S.round = 0; S.devSpent = 0; S.phase = "hq";
   refreshSponsorOffers(); refreshStaffMarket();
-  news(`Season ${S.season} begins. New regulations pulled the field closer together. Sign sponsors, the old deals have ended.`, "rule");
+  news(`Season ${S.season} begins with the ${regs.name.toLowerCase()}. ${regs.text} Sign sponsors, the old deals have ended.`, "rule");
   PW.save();
 };
 function rookie() {

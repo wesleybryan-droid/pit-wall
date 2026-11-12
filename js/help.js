@@ -111,7 +111,7 @@ const GUIDE = `
 <h3>Between races</h3>
 <ul>
 <li><b>HQ:</b> your next circuit, how your car compares there, your money and the paddock news. Press <b>Go to race weekend</b> when you're ready.</li>
-<li><b>Factory:</b> start research projects to improve Aero, Engine, Chassis, Reliability and Tire Wear. Safe projects always work. Bold projects gain more but can fail. Rivals upgrade every race, so keep your slots busy.</li>
+<li><b>Factory:</b> start research projects to improve Aero, Engine, Chassis, Reliability and Tire Wear. Each project shows a forecast range, and you won't know the exact gain until it's done. Gains shrink as a rating nears the top. Bold projects gain more but can fail, and every bold part raises <b>fragility</b>, the chance of a mid-race mechanical problem (box to fix it, or nurse it in Save mode). Rivals upgrade every race and copy whoever leads an area.</li>
 <li><b>Team:</b> sign drivers and hire better staff. The Race Engineer, Pit Crew Chief and Technical Director make the biggest difference early on.</li>
 <li><b>Sponsors:</b> fill your slots. Each deal pays per race plus a bonus for hitting its goal.</li>
 <li><b>Standings:</b> both championships and the calendar.</li>
@@ -161,7 +161,8 @@ const GUIDE = `
 <li>The <b>board</b> sets a target finishing position each season. Hit it for an $8M bonus and more confidence. Miss it and confidence drops. At zero, you're fired.</li>
 <li>The <b>trophy cabinet</b> (under Standings) tracks 14 achievements, from first points to the championship.</li>
 <li>Each season has 12 rounds, a mid-season rule change, and prize money by championship position.</li>
-<li>Between seasons, new rules pull every car toward the middle, drivers age, and contracts end.</li>
+<li>Between seasons, a new set of regulations rewrites one area (aero, engine, chassis or tires) and shakes up the order. Drivers age, and contracts end.</li>
+<li><b>Back up your career</b> from ☰ → Save & backup: download a save file or copy a save code. Some browsers (especially Safari) can delete saved games after a week without a visit. You can also install Pit Wall as an app from your browser's share or install menu.</li>
 </ul>
 <h3>Tips</h3>
 <ul>
@@ -188,6 +189,7 @@ PW.openMenu = function () {
   m.innerHTML = `<div class="box" style="max-width:380px"><h2 style="margin-bottom:14px">Menu</h2><div class="grid">
     <button class="btn" data-m="guide">How to play</button>
     <button class="btn" data-m="tour">Replay the walkthrough</button>
+    <button class="btn" data-m="backup">Save & backup</button>
     <button class="btn" data-m="new">New career</button>
     <button class="btn ghost" data-m="close">Close</button></div></div>`;
   m.addEventListener("click", e => {
@@ -196,6 +198,7 @@ PW.openMenu = function () {
     m.remove();
     const a = b && b.dataset.m;
     if (a === "guide") PW.openGuide();
+    if (a === "backup") PW.openBackup();
     if (a === "tour") PW.tutorialReplay();
     if (a === "new" && confirm("Start a new career? Your current save will be erased.")) { PW.wipe(); PW.ui.reset(); }
   });

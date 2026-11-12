@@ -68,6 +68,7 @@ function renderCore() {
   renderShell();
 }
 PW.render = render;
+PW.toast = toast;
 
 function renderTitle() {
   const saved = PW.load();
@@ -82,6 +83,7 @@ function renderTitle() {
     <div class="field"><span>Team color</span><div class="swatches">${PW.PLAYER_COLORS.map(c => `<button data-a="color" data-v="${c}" class="${c === newColor ? "on" : ""}" style="background:${c}" aria-label="color ${c}"></button>`).join("")}</div></div>
     <label class="row" style="margin-top:6px;cursor:pointer;font-weight:600"><input type="checkbox" id="tut" checked style="width:18px;height:18px"> Show me how to play (recommended)</label>
     <div class="row" style="margin-top:22px"><button class="btn go" data-a="new">Start career</button><button class="btn ghost" data-a="guide">How to play</button></div>
+    <button class="btn sm ghost" data-a="backup" style="margin-top:12px">Restore a saved career</button>
     <p class="dim" style="font-size:12px;margin-top:28px">Unofficial fan game. Not affiliated with Formula 1 or any team, driver or circuit. Teams and drivers are fictional.</p>
   </div></div>`;
 }
@@ -218,7 +220,7 @@ function pageFactory() {
     if (!p) return `<div class="slot"><b class="muted">Empty slot</b><div class="dim" style="font-size:12px">Pick a project below</div></div>`;
     const done = p.races - p.left;
     return `<div class="slot busy"><div class="spread"><b>${esc(p.name)}</b>${p.risk ? `<span class="pill amber">${Math.round(p.risk * 100)}% risk</span>` : ""}</div>
-      <div class="muted" style="font-size:12px;margin:2px 0 8px">${PW.AREAS.find(a => a.id === p.area).name} +${p.gain} · ${p.left} race${p.left > 1 ? "s" : ""} to go</div>${bar(done, p.races)}</div>`;
+      <div class="muted" style="font-size:12px;margin:2px 0 8px">${PW.AREAS.find(a => a.id === p.area).name} +${p.lo != null ? p.lo + "–" + p.hi : p.gain} · ${p.left} race${p.left > 1 ? "s" : ""} to go</div>${bar(done, p.races)}</div>`;
   }).join("");
   const areas = PW.AREAS.map(a => {
     const tier = s.research.tier[a.id], busy = s.research.active.some(p => p.area === a.id);
@@ -231,7 +233,7 @@ function pageFactory() {
       ${busy ? `<div class="opt"><span class="pill blue">In development</span></div>` : opts.map(o => {
         const p = PW.projectFor(a.id, o), why = PW.canStart(p);
         return `<div class="opt ${o}"><div class="spread"><span class="nm">${esc(p.name)}</span>${o === "bold" ? `<span class="pill amber">Bold</span>` : `<span class="pill">${tier < 3 ? "Safe" : "Refine"}</span>`}</div>
-          <div class="meta">+${p.gain} ${a.name} · ${M(p.cost)} · ${p.races} race${p.races > 1 ? "s" : ""}${p.risk ? ` · <span class="warn">${Math.round(p.risk * 100)}% chance to fail</span>` : ""}</div>
+          <div class="meta">+${p.lo}–${p.hi} ${a.name} · ${M(p.cost)} · ${p.races} race${p.races > 1 ? "s" : ""}${p.risk ? ` · <span class="warn">${Math.round(p.risk * 100)}% chance to fail</span>` : ""}</div>
           <button class="btn sm ${why ? "" : "primary"}" data-a="research" data-v="${a.id}" data-o="${o}" ${why ? `disabled title="${esc(why)}"` : ""}>${why ? esc(why) : "Start project"}</button></div>`;
       }).join("")}</div>`;
   }).join("");
@@ -239,7 +241,8 @@ function pageFactory() {
     <div class="card team"><h3>Car ratings</h3>${carPic(me, "factory")}${ratings}</div>
     <div class="card"><h3>Research slots (${s.research.active.length}/${slots})</h3><div class="slots">${slotHtml}</div>
       <hr><div class="spread"><span>Development cap</span><b class="num">${M(s.devSpent)} of ${M(PW.devCap())}</b></div>${bar(s.devSpent, PW.devCap())}
-      <p class="muted" style="font-size:13px;margin:10px 0 0">Projects finish after the race weekends shown. Bold projects pay off big but can fail in testing. Rivals develop every race, so standing still means going backwards.</p></div>
+      <hr><div class="spread"><span title="Bold parts are unproven. Each one makes mid-race mechanical problems more likely. Reliability projects bring it down.">Car fragility</span><b class="num ${s.fragility >= 3 ? "bad" : s.fragility >= 1.5 ? "warn" : "good"}">${(s.fragility || 0).toFixed(1)}</b></div>${bar(Math.min(5, s.fragility || 0), 5, (s.fragility || 0) >= 3 ? "lowconf" : "")}
+      <p class="muted" style="font-size:13px;margin:10px 0 0">Results are a range, not a promise: a better department head narrows the forecast, and gains shrink as a rating nears the top. Bold projects pay off big but can fail, and every bold part raises <b>fragility</b>, the chance of a mid-race mechanical problem. Reliability projects lower it. Rivals develop every race and copy whoever leads an area.</p></div>
   </div><div class="areas">${areas}</div>`;
 }
 
@@ -487,7 +490,8 @@ function updateRaceDom(full) {
   set("ctl", mine.map(car => {
     const ahead = order[car.pos - 2], gapA = ahead && !car.dnf ? ((ahead.dist - car.dist) * car.lapTime) : null;
     const wearPct = Math.round(car.wear * 100);
-    const plan = car.dnf ? `<span class="dnf">Out: ${car.dnf}</span>` : car.finished ? "Finished" : car.pitReq ? `<b class="warn">Boxing this lap for ${PW.TYRES[car.pitReq].name}s</b> <button class="btn sm ghost" data-pd="cancelbox" data-v="${car.id}">Stay out</button>` : car.plan[0] ? `Plan: box lap ${car.plan[0].lap} for ${PW.TYRES[car.plan[0].tyre].name}s` : car.pitTimer > 0 ? "In the pits" : "No more stops planned";
+    const issue = car.issue && !car.dnf && !car.finished ? `<span class="issuetag">⚠ ${car.issue.part} problem. Box to fix or nurse it</span> ` : "";
+    const plan = car.dnf ? `<span class="dnf">Out: ${car.dnf}</span>` : car.finished ? "Finished" : issue + (car.pitReq ? `<b class="warn">Boxing this lap for ${PW.TYRES[car.pitReq].name}s</b> <button class="btn sm ghost" data-pd="cancelbox" data-v="${car.id}">Stay out</button>` : car.plan[0] ? `Plan: box lap ${car.plan[0].lap} for ${PW.TYRES[car.plan[0].tyre].name}s` : car.pitTimer > 0 ? "In the pits" : "No more stops planned");
     return `<div class="carctl"><div class="head">${face(car.d, 44)}<div class="pos num">${car.dnf ? "—" : "P" + car.pos}</div><div style="flex:1"><div class="nm">${esc(car.name)}</div><div class="sub num">${car.lastLap ? "Last " + car.lastLap.toFixed(2) + "s" : "Grid P" + car.startPos}${gapA != null && gapA > 0 && gapA < 60 && !car.finished ? ` · ${gapA.toFixed(1)}s to ${ahead.code}` : ""}</div></div>${car.dnf ? "" : tyre(car.tyre)}</div>
       ${car.dnf || car.finished ? `<div class="plan">${plan}</div>` : `
       <div class="wear"><span>Tires</span><div class="bar"><i style="width:${Math.max(0, 100 - wearPct)}%;background:${wearPct > 80 ? "var(--red)" : wearPct > 55 ? "var(--amber)" : "var(--green)"}"></i></div><span class="num">${Math.max(0, 100 - wearPct)}%</span></div>
@@ -634,8 +638,8 @@ function renderSeasonEnd() {
           ${sum.beat.map(b => `<div class="spread"><span>${esc(b.s.name)}: ${esc(b.s.goal.text)}</span><b class="${b.ok ? "good" : "bad"}">${b.ok ? "+" + M(b.s.bonus) : "Missed"}</b></div>`).join("")}</div>
         <div class="card"><h3>Expiring contracts</h3>${sum.expiring.length ? sum.expiring.map(d => `<label class="spread" style="margin:8px 0;cursor:pointer"><span><input type="checkbox" class="renew" value="${d.id}" checked> Renew <b>${esc(d.name)}</b> (${d.role === "res" ? "reserve" : "race seat"}, OVR ${PW.ovr(d)}, age ${d.age})</span><span class="num muted">${M(PW.driverSalary(d))}/season</span></label>`).join("") : `<p class="muted">Everyone is under contract for next season.</p>`}
           <p class="muted" style="font-size:12px">Unticked drivers leave. Empty seats are filled from your reserve or the cheapest free agent, and you can sign someone better in the Team tab.</p></div>
-        <div class="card"><h3>Next season</h3><p class="muted" style="margin-top:0">New regulations pull every car 25% toward the middle of the field. Research tiers reset, sponsor deals end, and drivers age: young ones improve, veterans fade.</p>
-          <button class="btn go" data-a="nextseason">Start season ${s.season + 1} ›</button></div>
+        <div class="card"><h3>Next season</h3><p class="muted" style="margin-top:0"><b>${esc(sum.regs.name)}:</b> ${esc(sum.regs.text)} Every other area drifts toward the middle of the field. Research tiers reset, sponsor deals end, and drivers age: young ones improve, veterans fade.</p>
+          <div class="row"><button class="btn go" data-a="nextseason">Start season ${s.season + 1} ›</button><button class="btn" data-a="backup">Back up career</button></div></div>
       </div></div></div>`;
 }
 
@@ -647,6 +651,7 @@ app.addEventListener("click", e => {
   switch (a) {
     case "color": { newColor = v; document.querySelectorAll(".swatches button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); const tc = document.getElementById("titlecar"); if (tc) { tc.style.visibility = "visible"; tc.src = `img/cars/you-${v.replace("#", "")}.webp`; } Snd.click(); break; }
     case "guide": PW.openGuide(); break;
+    case "backup": PW.openBackup(); break;
     case "new": { const n = (document.getElementById("tname").value || "").trim() || "Pit Wall Racing"; if (PW.tutorialStart) PW.tutorialStart(document.getElementById("tut").checked); PW.newCareer(n, newColor); tab = "hq"; Snd.click(); render(); break; }
     case "wipe": PW.wipe(); W = null; R = null; render(); break;
     case "sound": Snd.toggle(); render(); break;
