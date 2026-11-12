@@ -260,7 +260,7 @@ function onCross(R, car) {
   if (Math.random() < crash) {
     car.dnf = "Crash";
     if (car.mine) R.damageCost += rand(1, 2.5);
-    radio(R, car.mine ? `${car.code} is in the wall! Are you OK? ... He's OK.` : `Crash! ${car.name} (${car.teamObj.short}) is out.`, car.mine ? "bad" : "", car);
+    radio(R, car.mine ? `${car.code} is in the wall! Are you OK? ... Driver is OK, just shaken.` : `Crash! ${car.name} (${car.teamObj.short}) is out.`, car.mine ? "bad" : "", car);
     banner(R, `Crash! ${car.name} is out`, "bad");
     if (Math.random() < 0.65) startSC(R, "Crash");
     return;
@@ -371,8 +371,8 @@ PW.stepRace = function (R, dt) {
     const gapS = (ahead.dist - car.dist) * car.lapTime;
     // rivals use their battery to attack and defend
     if (!R.sc) {
-      if (!car.mine) { if (!car.boost && gapS < 0.9 && car.ers > 40 && car.lapTime < ahead.lapTime + 0.35) car.boost = true; else if (car.boost && (gapS > 1.6 || car.ers < 8)) car.boost = false; }
-      if (!ahead.mine) { if (!ahead.boost && gapS < 0.45 && ahead.ers > 55 && Math.random() < 0.02) ahead.boost = true; }
+      if (!car.mine) { if (!car.boost && car.lapIdx >= 2 && gapS < 0.9 && car.ers > 45 && car.lapTime < ahead.lapTime + 0.35 && Math.random() < dt * 0.04) car.boost = true; else if (car.boost && (gapS > 1.6 || car.ers < 8)) car.boost = false; }
+      if (!ahead.mine) { if (!ahead.boost && ahead.lapIdx >= 2 && gapS < 0.45 && ahead.ers > 55 && Math.random() < dt * 0.02) ahead.boost = true; }
     }
     if (R.sc) {
       if (gapS > 1.2) car.dist += dt / car.lapTime * 0.6; // catch up to the queue
@@ -450,7 +450,7 @@ PW.swapCars = R => {
   const s = PW.canSwap(R); if (!s) return;
   const fd = s.front.dist; s.front.dist = s.back.dist - 0.0005; s.back.dist = fd + 0.0005;
   s.front.moraleDelta -= 12; s.back.moraleDelta += 4;
-  radio(R, `${s.front.code}: let ${s.back.code} through. Team orders. (He is not happy.)`, "warn", s.front);
+  radio(R, `${s.front.code}: let ${s.back.code} through. Team orders. (Not a happy driver.)`, "warn", s.front);
 };
 
 /* ---------- headless run (for testing and "sim to end") ---------- */

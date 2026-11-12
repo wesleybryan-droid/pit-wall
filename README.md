@@ -15,6 +15,8 @@ You start as the slowest team on the grid. In testing, a sensible player scores 
 
 Teams, drivers and sponsors are fictional. Unofficial fan game, not affiliated with Formula 1 or any team, driver or circuit.
 
+Driver portraits were generated with Google Gemini and the car renders with ChatGPT, then cropped and cut out for the game (`img/`). All depicted drivers are invented characters.
+
 Track outlines come from the open [f1-circuits](https://github.com/bacinger/f1-circuits) dataset by Tomislav Bacinger, used under the MIT License (see `licenses/`).
 
 ## Run it
@@ -36,5 +38,6 @@ Then go to http://localhost:8790. Progress saves to the browser automatically.
 - `js/ui.js`: screens, input and sound
 - `js/help.js`: first-time walkthrough and How to Play guide
 - `css/style.css`: broadcast-style dark theme
+- `img/drivers/`, `img/cars/`: AI-generated portraits and car renders
 
 Built by vibe coding with Claude.

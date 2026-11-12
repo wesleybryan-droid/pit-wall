@@ -48,6 +48,8 @@ function result(err, ok) { if (err) { toast(err, true); Snd.bad(); } else { if (
 
 /* ---------- small builders ---------- */
 const bar = (v, max = 100, cls = "") => `<div class="bar"><i class="${cls}" style="width:${Math.max(0, Math.min(100, v / max * 100))}%"></i></div>`;
+const face = (d, size, cls = "") => { const src = d && PW.portrait(d); return src ? `<img class="face ${cls}" src="${src}" alt="" style="width:${size}px;height:${size}px" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="face noface ${cls}" style="width:${size}px;height:${size}px"></span>`; };
+const carPic = (team, cls = "") => `<img class="carpic ${cls}" src="${PW.carImg(team)}" alt="" loading="lazy" onerror="this.remove()">`;
 const tyre = t => `<span class="tyre" style="--c:${PW.TYRES[t].color}">${t}</span>`;
 const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
 const level = (v, a, b, words) => v < a ? words[0] : v < b ? words[1] : words[2];
@@ -74,6 +76,7 @@ function renderTitle() {
   app.innerHTML = `<div class="title"><div class="box">
     <div class="pill red" style="margin-bottom:14px">Team management</div>
     <h1>Pit<span>/</span>Wall</h1>
+    <img class="carpic hero" id="titlecar" src="img/cars/you-${newColor.replace("#", "")}.webp" alt="" onerror="this.style.visibility='hidden'">
     <p>Take over the slowest team on the grid. Research upgrades, hire drivers and engineers, sign sponsors, and make the calls that win races from the pit wall.</p>
     <label class="field"><span>Team name</span><input id="tname" maxlength="24" value="Pit Wall Racing"></label>
     <div class="field"><span>Team color</span><div class="swatches">${PW.PLAYER_COLORS.map(c => `<button data-a="color" data-v="${c}" class="${c === newColor ? "on" : ""}" style="background:${c}" aria-label="color ${c}"></button>`).join("")}</div></div>
@@ -186,7 +189,7 @@ function pageHQ() {
       </div>
     </div>
     <div class="grid" style="align-content:start">
-      <div class="card" id="status"><h3>Team status</h3>
+      <div class="card" id="status">${carPic(me, "status")}<h3>Team status</h3>
         <div class="spread"><span>Income per race</span><b class="num good">${M(PW.TV_PER_RACE + spons)}</b></div>
         <div class="spread"><span>Salaries + operations</span><b class="num bad">−${M(w.total / 12 + PW.OPS_PER_RACE).slice(1)}</b></div>
         <div class="spread" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--line)"><span>Net per race</span><b class="num ${net >= 0 ? "good" : "bad"}">${M(net)}</b></div>
@@ -233,7 +236,7 @@ function pageFactory() {
       }).join("")}</div>`;
   }).join("");
   return `<div class="grid g2" style="margin-bottom:16px">
-    <div class="card team"><h3>Car ratings</h3>${ratings}</div>
+    <div class="card team"><h3>Car ratings</h3>${carPic(me, "factory")}${ratings}</div>
     <div class="card"><h3>Research slots (${s.research.active.length}/${slots})</h3><div class="slots">${slotHtml}</div>
       <hr><div class="spread"><span>Development cap</span><b class="num">${M(s.devSpent)} of ${M(PW.devCap())}</b></div>${bar(s.devSpent, PW.devCap())}
       <p class="muted" style="font-size:13px;margin:10px 0 0">Projects finish after the race weekends shown. Bold projects pay off big but can fail in testing. Rivals develop every race, so standing still means going backwards.</p></div>
@@ -245,7 +248,7 @@ function driverCard(d, label) {
   const s = S();
   if (!d) return `<div class="card"><h3>${label}</h3><p class="muted">Empty seat. Sign someone from the market below.</p></div>`;
   const swap = d.role !== "res" && PW.reserve() ? `<button class="btn sm" data-a="swapres" data-v="${d.role}">Swap with reserve</button>` : "";
-  return `<div class="card team"><h3>${label}</h3><div class="person"><div class="helmet"></div><div>
+  return `<div class="card team"><h3>${label}</h3><div class="person">${face(d, 72, "big")}<div>
       <div class="spread"><b style="font-size:18px">${esc(d.name)}</b><span class="ovr num">${PW.ovr(d)}</span></div>
       <div class="muted" style="font-size:13px">${d.code} · Age ${d.age} · ${M(d.salary)}/season · ${d.contract} season${d.contract === 1 ? "" : "s"} left</div>
       <div class="mini">${[["Pace", d.pace], ["Craft", d.racecraft], ["Consis.", d.consistency], ["Tires", d.tyre], ["Wet", d.wet]].map(([k, v]) => `<div><span>${k}</span><b class="num">${v}</b></div>`).join("")}</div>
@@ -270,7 +273,7 @@ function pageTeam() {
     <h2 style="margin:22px 0 12px">Key staff</h2><div class="grid g3" id="staff" style="margin-bottom:16px">${staff}</div>
     <h2 style="margin:22px 0 12px">Driver market</h2>
     <div class="card" style="overflow-x:auto"><table><thead><tr><th>Driver</th><th>Age</th><th>OVR</th><th>Pace</th><th>Craft</th><th>Consis.</th><th>Tires</th><th>Wet</th><th>Asks</th><th>Sign as</th></tr></thead><tbody>
-      ${fa.map(d => { const ask = PW.askSalary(d); return `<tr><td><b>${esc(d.name)}</b> <span class="dim">${d.code}</span></td><td>${d.age}</td><td><span class="ovr num">${PW.ovr(d)}</span></td><td>${d.pace}</td><td>${d.racecraft}</td><td>${d.consistency}</td><td>${d.tyre}</td><td>${d.wet}</td><td class="num">${M(ask)}<div class="dim" style="font-size:11px">fee ${M(ask * .5)}</div></td>
+      ${fa.map(d => { const ask = PW.askSalary(d); return `<tr><td><span class="who">${face(d, 32)}<span><b>${esc(d.name)}</b> <span class="dim">${d.code}</span></span></span></td><td>${d.age}</td><td><span class="ovr num">${PW.ovr(d)}</span></td><td>${d.pace}</td><td>${d.racecraft}</td><td>${d.consistency}</td><td>${d.tyre}</td><td>${d.wet}</td><td class="num">${M(ask)}<div class="dim" style="font-size:11px">fee ${M(ask * .5)}</div></td>
         <td style="white-space:nowrap">${["d1", "d2", "res"].map(sl => `<button class="btn sm" data-a="sign" data-v="${d.id}" data-s="${sl}">${sl === "res" ? "Res" : sl.toUpperCase()}</button>`).join(" ")}</td></tr>`; }).join("")}
     </tbody></table><p class="muted" style="font-size:12px;margin:10px 0 0">Signing a driver into a seat releases whoever is in it (race drivers get a 30% payoff). Stars ask for more to join a team low in the standings.</p></div>`;
 }
@@ -303,8 +306,8 @@ function pageSponsors() {
 /* ---------- Standings ---------- */
 function pageStandings() {
   const s = S();
-  const cons = PW.standings().map((t, i) => `<tr class="${t.player ? "me" : ""}"><td>${i + 1}</td><td><span class="sw" style="background:${t.color}"></span>${esc(t.name)}</td><td class="num"><b>${t.points}</b></td><td class="num muted">${(PW.AREAS.reduce((a, x) => a + t.car[x.id], 0) / 5).toFixed(1)}</td></tr>`).join("");
-  const drv = PW.driverStandings().slice(0, 22).map((d, i) => { const t = s.teams[d.team]; return `<tr class="${d.team === "you" ? "me" : ""}"><td>${i + 1}</td><td><span class="sw" style="background:${t ? t.color : "#555"}"></span>${esc(d.name)}</td><td class="muted">${t ? esc(t.short) : "—"}</td><td class="num"><b>${d.points}</b></td><td class="num">${d.wins}</td><td class="num">${d.podiums}</td></tr>`; }).join("");
+  const cons = PW.standings().map((t, i) => `<tr class="${t.player ? "me" : ""}"><td>${i + 1}</td><td><span class="who">${carPic(t, "thumb")}<span><span class="sw" style="background:${t.color}"></span>${esc(t.name)}</span></span></td><td class="num"><b>${t.points}</b></td><td class="num muted">${(PW.AREAS.reduce((a, x) => a + t.car[x.id], 0) / 5).toFixed(1)}</td></tr>`).join("");
+  const drv = PW.driverStandings().slice(0, 22).map((d, i) => { const t = s.teams[d.team]; return `<tr class="${d.team === "you" ? "me" : ""}"><td>${i + 1}</td><td><span class="who">${face(d, 26)}<span><span class="sw" style="background:${t ? t.color : "#555"}"></span>${esc(d.name)}</span></span></td><td class="muted">${t ? esc(t.short) : "—"}</td><td class="num"><b>${d.points}</b></td><td class="num">${d.wins}</td><td class="num">${d.podiums}</td></tr>`; }).join("");
   const cal = PW.CIRCUITS.map((c, i) => { const h = s.history.find(x => x.season === s.season && x.round === i); return `<tr class="${i === s.round ? "me" : ""}"><td>${i + 1}</td><td>${esc(c.name)}</td><td class="muted">${esc(c.tag)}</td><td>${h ? h.mine.map(m => `${m.code} ${m.dnf ? '<span class="dnf">DNF</span>' : "P" + m.pos}`).join(" · ") : i === s.round ? '<span class="pill red">Next</span>' : ""}</td></tr>`; }).join("");
   return `<div class="grid g2"><div class="card"><h3>Constructors</h3><table><thead><tr><th>#</th><th>Team</th><th>Pts</th><th>Car avg</th></tr></thead><tbody>${cons}</tbody></table></div>
     <div class="card"><h3>Drivers</h3><table><thead><tr><th>#</th><th>Driver</th><th>Team</th><th>Pts</th><th>W</th><th>Pod</th></tr></thead><tbody>${drv}</tbody></table></div></div>
@@ -482,7 +485,7 @@ function updateRaceDom(full) {
     const ahead = order[car.pos - 2], gapA = ahead && !car.dnf ? ((ahead.dist - car.dist) * car.lapTime) : null;
     const wearPct = Math.round(car.wear * 100);
     const plan = car.dnf ? `<span class="dnf">Out: ${car.dnf}</span>` : car.finished ? "Finished" : car.pitReq ? `<b class="warn">Boxing this lap for ${PW.TYRES[car.pitReq].name}s</b> <button class="btn sm ghost" data-pd="cancelbox" data-v="${car.id}">Stay out</button>` : car.plan[0] ? `Plan: box lap ${car.plan[0].lap} for ${PW.TYRES[car.plan[0].tyre].name}s` : car.pitTimer > 0 ? "In the pits" : "No more stops planned";
-    return `<div class="carctl"><div class="head"><div class="pos num">${car.dnf ? "—" : "P" + car.pos}</div><div style="flex:1"><div class="nm">${esc(car.name)}</div><div class="sub num">${car.lastLap ? "Last " + car.lastLap.toFixed(2) + "s" : "Grid P" + car.startPos}${gapA != null && gapA > 0 && gapA < 60 && !car.finished ? ` · ${gapA.toFixed(1)}s to ${ahead.code}` : ""}</div></div>${car.dnf ? "" : tyre(car.tyre)}</div>
+    return `<div class="carctl"><div class="head">${face(car.d, 44)}<div class="pos num">${car.dnf ? "—" : "P" + car.pos}</div><div style="flex:1"><div class="nm">${esc(car.name)}</div><div class="sub num">${car.lastLap ? "Last " + car.lastLap.toFixed(2) + "s" : "Grid P" + car.startPos}${gapA != null && gapA > 0 && gapA < 60 && !car.finished ? ` · ${gapA.toFixed(1)}s to ${ahead.code}` : ""}</div></div>${car.dnf ? "" : tyre(car.tyre)}</div>
       ${car.dnf || car.finished ? `<div class="plan">${plan}</div>` : `
       <div class="wear"><span>Tires</span><div class="bar"><i style="width:${Math.max(0, 100 - wearPct)}%;background:${wearPct > 80 ? "var(--red)" : wearPct > 55 ? "var(--amber)" : "var(--green)"}"></i></div><span class="num">${Math.max(0, 100 - wearPct)}%</span></div>
       <div class="ers"><span class="muted">⚡ Battery</span><div class="bar"><i style="width:${Math.round(car.ers)}%"></i></div><button class="btn sm boostbtn ${car.boost ? "on" : ""}" data-pd="boost" data-v="${car.id}" ${R.sc || car.pitTimer > 0 || (!car.boost && car.ers < 5) ? "disabled" : ""}>${car.boost ? "⚡ Boosting" : "⚡ Boost"}</button></div>
@@ -503,7 +506,7 @@ function decisionCard() {
   const cars = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
   const rows = cars.map(car => {
     const grip = Math.max(0, Math.round((1 - car.wear) * 100));
-    return `<div class="drow"><div class="dcar"><b>P${car.pos} ${car.code}</b><span>${tyre(car.tyre)} ${grip}% grip${car.pitTimer > 0 ? " · in pits" : ""}</span></div>
+    return `<div class="drow"><div class="dcar"><b class="who">${face(car.d, 30)}P${car.pos} ${car.code}</b><span>${tyre(car.tyre)} ${grip}% grip${car.pitTimer > 0 ? " · in pits" : ""}</span></div>
       <div class="dbtns">${["S", "M", "H", "W"].map(t => `<button class="tbtn ${car.pitReq === t ? "sel" : ""} ${d.suggest[car.id] === t ? "sug" : ""}" data-pd="box" data-v="${car.id}" data-t="${t}" title="Box for ${PW.TYRES[t].name}s">${tyre(t)}</button>`).join("")}
       <button class="btn sm ${car.pitReq ? "" : "on"}" data-pd="cancelbox" data-v="${car.id}">Stay out</button></div>
       <div class="dnote">${car.pitReq ? `<b class="warn">Boxing for ${PW.TYRES[car.pitReq].name}s at the end of this lap</b>` : d.suggest[car.id] ? `Engineer suggests: box for ${PW.TYRES[d.suggest[car.id]].name}s` : "Engineer: stay out"}</div></div>`;
@@ -553,7 +556,7 @@ function lapChart(lc) {
 function renderResults() {
   const res = W.res, rep = W.report, s = S();
   const top3 = res.classified.slice(0, 3);
-  const podium = [1, 0, 2].map(i => { const e = top3[i]; if (!e) return ""; const h = [110, 140, 90][[1, 0, 2].indexOf(i)]; return `<div><div class="nm" style="color:${e.color}">${e.code}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${esc(s.teams[e.team].short)}</div><div class="blk" style="height:${h}px;border-top:4px solid ${e.color}">${i + 1}</div></div>`; }).join("");
+  const podium = [1, 0, 2].map(i => { const e = top3[i]; if (!e) return ""; const h = [110, 140, 90][[1, 0, 2].indexOf(i)]; return `<div>${face(s.drivers.find(x => x.id === e.id), 78, "pod")}<div class="nm" style="color:${e.color}">${e.code}</div><div class="muted" style="font-size:12px;margin-bottom:6px">${esc(s.teams[e.team].short)}</div><div class="blk" style="height:${h}px;border-top:4px solid ${e.color}">${i + 1}</div></div>`; }).join("");
   const rows = res.classified.map((e, i) => `<tr class="${e.mine ? "me" : ""}"><td>${i + 1}</td><td><span class="sw" style="background:${e.color}"></span>${esc(e.name)}</td><td class="muted">${esc(s.teams[e.team].short)}</td><td class="num">${e.dnf ? `<span class="dnf">DNF</span> <span class="muted">${e.dnf}</span>` : e.gap}${e.penalty ? ' <span class="bad">(+20s pen)</span>' : ""}</td><td class="num muted">${e.grid}${!e.dnf && e.grid !== i + 1 ? (e.grid > i + 1 ? ` <span class="good">▲${e.grid - i - 1}</span>` : ` <span class="bad">▼${i + 1 - e.grid}</span>`) : ""}</td><td class="num">${e.stops}</td><td class="num"><b>${e.pts || ""}</b></td></tr>`).join("");
   const mine = res.classified.map((e, i) => ({ e, p: i + 1 })).filter(x => x.e.mine);
   const best = Math.min(...mine.map(x => x.e.dnf ? 99 : x.p));
@@ -607,7 +610,7 @@ app.addEventListener("click", e => {
   const a = el.dataset.a, v = el.dataset.v;
   const s = S();
   switch (a) {
-    case "color": newColor = v; document.querySelectorAll(".swatches button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); Snd.click(); break;
+    case "color": { newColor = v; document.querySelectorAll(".swatches button").forEach(b => b.classList.toggle("on", b.dataset.v === v)); const tc = document.getElementById("titlecar"); if (tc) { tc.style.visibility = "visible"; tc.src = `img/cars/you-${v.replace("#", "")}.webp`; } Snd.click(); break; }
     case "guide": PW.openGuide(); break;
     case "new": { const n = (document.getElementById("tname").value || "").trim() || "Pit Wall Racing"; if (PW.tutorialStart) PW.tutorialStart(document.getElementById("tut").checked); PW.newCareer(n, newColor); tab = "hq"; Snd.click(); render(); break; }
     case "wipe": PW.wipe(); W = null; R = null; render(); break;

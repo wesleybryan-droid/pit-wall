@@ -552,7 +552,8 @@ function rookie() {
   const name = PW.newName();
   const code = name.split(" ")[1].slice(0, 3).toUpperCase();
   const b = randi(70, 80);
-  const d = { id: code + randi(10, 99), name, code, age: randi(18, 20), pace: b + randi(0, 4), racecraft: b - randi(2, 7), consistency: b - randi(4, 10), tyre: b - randi(2, 6), wet: b + randi(-4, 4), morale: 70, points: 0, wins: 0, podiums: 0, careerPts: 0, team: "", role: null, contract: 0 };
+  const female = PW.FEMALE_FIRST.includes(name.split(" ")[0]);
+  const d = { id: code + randi(10, 99), name, code, face: pick(PW.ROOKIE_FACES[female ? "f" : "m"]), age: randi(18, 20), pace: b + randi(0, 4), racecraft: b - randi(2, 7), consistency: b - randi(4, 10), tyre: b - randi(2, 6), wet: b + randi(-4, 4), morale: 70, points: 0, wins: 0, podiums: 0, careerPts: 0, team: "", role: null, contract: 0 };
   d.salary = PW.driverSalary(d);
   return d;
 }

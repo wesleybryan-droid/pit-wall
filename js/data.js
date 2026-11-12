@@ -52,6 +52,13 @@ PW.driverSalary = d => +Math.max(0.4, Math.pow(Math.max(0, PW.ovr(d) - 68) / 24,
 PW.FIRST = ["Alex", "Bruno", "Chen", "Dario", "Emil", "Finn", "Gabriel", "Hana", "Ivo", "Jun", "Kofi", "Lena", "Marek", "Nico", "Olli", "Priya", "Quinn", "Rosa", "Sven", "Tariq", "Uma", "Viktor", "Wren", "Ximena", "Yara", "Zane"];
 PW.LAST = ["Achterberg", "Bianchi", "Carvalho", "Dubois", "Eriksen", "Ferreira", "Gallo", "Hoshino", "Iqbal", "Jansen", "Kurz", "Laine", "Moretti", "Nakamura", "Ortega", "Pires", "Quist", "Rossi", "Silva", "Takeda", "Ulrich", "Varga", "Wolff", "Yilmaz", "Zielinski"];
 PW.newName = () => PW.pick(PW.FIRST) + " " + PW.pick(PW.LAST);
+PW.FEMALE_FIRST = ["Hana", "Lena", "Priya", "Rosa", "Uma", "Ximena", "Yara"];
+// AI-generated portraits (Gemini) for the starting roster, plus spare faces for rookies
+PW.PORTRAITS = ["MAR", "BRT", "OKA", "LUN", "VID", "WHI", "ARI", "HAD", "GAU", "CAS", "PET", "WEB", "SAN", "LEF", "MEN", "LIN", "NOV", "HAR", "REI", "BEL", "SHA", "MOR", "KOW", "REY", "KEL", "IVA", "COL", "DUA", "SAL"];
+PW.ROOKIE_FACES = { m: ["rookie-m1", "rookie-m2"], f: ["rookie-f1"] };
+PW.portrait = d => d.face ? `img/drivers/${d.face}.webp` : PW.PORTRAITS.includes(d.id) ? `img/drivers/${d.id}.webp` : null;
+// AI-generated car renders (ChatGPT): one per rival team, one per player color
+PW.carImg = team => team.player ? `img/cars/you-${team.color.replace("#", "")}.webp` : `img/cars/${team.id}.webp`;
 
 /* ---------- staff ---------- */
 PW.ROLES = [

@@ -108,7 +108,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .opt.bold{border-color:rgba(255,176,0,.35)}
 
 /* people */
-.person{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:start}
+.person{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:start}
 .avatar{width:56px;height:56px;border-radius:12px;display:grid;place-items:center;font-weight:900;font-size:18px;color:#0b0d12;background:var(--team)}
 .helmet{width:56px;height:56px;border-radius:50% 50% 40% 40%;position:relative;background:var(--team);overflow:hidden}
 .helmet::after{content:"";position:absolute;left:8px;right:4px;top:22px;height:13px;background:#0b0d12;border-radius:8px 4px 4px 8px}
@@ -314,3 +314,16 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 .trophy b{display:block;font-size:13px;margin-top:2px}
 .trophy span{font-size:11px;color:var(--muted)}
 .trophycard{border-color:rgba(255,176,0,.6);background:linear-gradient(180deg,rgba(255,176,0,.12),var(--panel))}
+
+/* portraits and car renders */
+.face{display:inline-block;border-radius:50%;object-fit:cover;background:#1b2029;border:2px solid var(--line2);flex:none;vertical-align:middle}
+.face.big{border-radius:14px;border:2px solid var(--team);box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.face.pod{border-color:var(--amber);margin:0 auto 6px;display:block}
+.noface{background:radial-gradient(circle at 50% 38%,#3a4352 0 28%,transparent 29%),radial-gradient(ellipse at 50% 100%,#3a4352 0 45%,transparent 46%),#1b2029}
+.who{display:inline-flex;align-items:center;gap:8px}
+.carctl .head .face{border-color:var(--team)}
+.carpic{display:block;width:100%;height:auto;object-fit:contain;pointer-events:none;user-select:none}
+.carpic.hero{max-width:520px;margin:6px 0 4px;filter:drop-shadow(0 18px 24px rgba(0,0,0,.55))}
+.carpic.status{max-width:300px;margin:-6px auto 4px;filter:drop-shadow(0 10px 14px rgba(0,0,0,.5))}
+.carpic.factory{max-width:420px;margin:0 auto 8px;filter:drop-shadow(0 12px 16px rgba(0,0,0,.5))}
+.carpic.thumb{width:64px;filter:drop-shadow(0 3px 4px rgba(0,0,0,.5))}
