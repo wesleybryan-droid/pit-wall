@@ -201,6 +201,7 @@ function banner(R, text, kind, prio) {
   if (R.bannerLog[text] && now - R.bannerLog[text] < 12000) return; // no repeats
   R.bannerLog[text] = now;
   (R.bannerQ = R.bannerQ || []).push({ text, kind: kind || "", prio, at: now });
+  if (PW.onEvent) PW.onEvent(R, "banner", { kind: kind || "", prio });
   if (prio <= 1) slow(R, 0.4, text);
 }
 PW.banner = banner;
@@ -261,6 +262,7 @@ function decide(R, kind, title, text, suggest, extra) {
   const mine = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
   if (!mine.length) return;
   R.decision = { kind, title, text, suggest: suggest || {}, mode: (extra && extra.mode) || null, car: (extra && extra.car) || null, at: R.t };
+  if (PW.onEvent) PW.onEvent(R, "decision", { kind });
   R.paused = true;
 }
 function dryFor(R, car) { return bestDryFor(R, car, R.laps - Math.max(0, car.lapIdx)); }
@@ -378,7 +380,7 @@ function onCross(R, car) {
     if (car.tel) { car.tel.tyre = 78; car.tel.stuck = 0; }
     if (!car.used.includes(tyre)) car.used.push(tyre);
     (car.stints = car.stints || [car.used[0]]).push(tyre);
-    if (car.mine) slow(R, 0.25, `${car.code} pit stop`);
+    if (car.mine) { slow(R, 0.25, `${car.code} pit stop`); if (PW.onEvent) PW.onEvent(R, "pit", { code: car.code }); }
     if (car.mine) radio(R, `${car.code} in the pits: ${PW.TYRES[tyre].name}s, ${p.stop.toFixed(1)}s stop.`, "", car);
     if (p.fumble && car.mine) radio(R, p.fumble + ". Wheel gun problem.", "bad", car);
   }
@@ -502,6 +504,7 @@ function leaderLap(R, car) {
 function startSC(R, why) {
   if (R.sc || R.leaderLap >= R.laps - 2) return;
   R.sc = { left: 3, why }; R.scCount++;
+  if (PW.onEvent) PW.onEvent(R, "sc", {});
   radio(R, `SAFETY CAR. ${why}. Cheap pit stop window!`, "sc");
   banner(R, `Safety car: ${why.toLowerCase()}`, "sc", 1);
   const sug = {};

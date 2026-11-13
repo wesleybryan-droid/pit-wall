@@ -9,31 +9,81 @@ let tab = "hq", W = null, R = null, raf = 0, newColor = PW.PLAYER_COLORS[0], ope
 
 /* ---------- sound ---------- */
 const Snd = (() => {
-  let ac = null, hum = null, on = true;
+  // Layered Web Audio cues, no sound files. Uses its own noise generator so audio
+  // never consumes Math.random (that would change the seeded Daily race).
+  let ac = null, master = null, hum = null, on = true, noiseBuf = null;
   try { on = localStorage.getItem("pitwall-sound") !== "off"; } catch (e) {}
-  const ctx = () => { if (!on) return null; try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === "suspended") ac.resume(); } catch (e) { return null; } return ac; };
-  const beep = (f, d, type = "square", v = .05, when = 0) => { const a = ctx(); if (!a) return; const t = a.currentTime + when, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f; g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + d); o.connect(g).connect(a.destination); o.start(t); o.stop(t + d + .02); };
-  const noise = (d, v, f) => { const a = ctx(); if (!a) return; const n = Math.floor(a.sampleRate * d), b = a.createBuffer(1, n, a.sampleRate), x = b.getChannelData(0); for (let i = 0; i < n; i++) x[i] = Math.random() * 2 - 1; const s = a.createBufferSource(); s.buffer = b; const fl = a.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = f; const g = a.createGain(); const t = a.currentTime; g.gain.setValueAtTime(.001, t); g.gain.linearRampToValueAtTime(v, t + d * .2); g.gain.exponentialRampToValueAtTime(.001, t + d); s.connect(fl).connect(g).connect(a.destination); s.start(); };
+  const ctx = () => {
+    if (!on) return null;
+    try {
+      if (!ac) {
+        ac = new (window.AudioContext || window.webkitAudioContext)();
+        const comp = ac.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 4;
+        master = ac.createGain(); master.gain.value = 0.9; master.connect(comp).connect(ac.destination);
+        const n = ac.sampleRate * 2; noiseBuf = ac.createBuffer(1, n, ac.sampleRate);
+        const x = noiseBuf.getChannelData(0); let seed = 1234567;
+        for (let i = 0; i < n; i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; x[i] = seed / 0x3fffffff - 1; }
+      }
+      if (ac.state === "suspended") ac.resume();
+    } catch (e) { return null; }
+    return ac;
+  };
+  const tone = (f, d, type = "sine", v = .05, when = 0, slide = 0) => {
+    const a = ctx(); if (!a) return; const t = a.currentTime + when, o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(slide, t + d);
+    g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + Math.min(.02, d / 4)); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    o.connect(g).connect(master); o.start(t); o.stop(t + d + .05);
+  };
+  const noise = (d, v, f, { type = "bandpass", q = 1, when = 0, attack = .2, f2 = 0 } = {}) => {
+    const a = ctx(); if (!a) return; const t = a.currentTime + when;
+    const s = a.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const fl = a.createBiquadFilter(); fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f, t); if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + d);
+    const g = a.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + d * attack); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+    s.connect(fl).connect(g).connect(master); s.start(t, t % 1.5); s.stop(t + d + .05);
+  };
   return {
     get on() { return on; },
     toggle() { on = !on; try { localStorage.setItem("pitwall-sound", on ? "on" : "off"); } catch (e) {} if (!on) this.humStop(); },
-    click() { beep(900, .03, "square", .025); },
-    radio() { beep(1400, .05, "sine", .05); beep(1100, .05, "sine", .05, .07); },
-    light() { beep(330, .25, "sine", .09); },
-    go() { beep(660, .5, "sine", .1); },
-    cheer() { noise(1.8, .25, 1400); beep(523, .15, "triangle", .08); beep(659, .15, "triangle", .08, .15); beep(784, .3, "triangle", .08, .3); },
-    bad() { beep(160, .3, "sawtooth", .06); },
+    click() { tone(1200, .025, "square", .018); },
+    // team radio: squelch, click, two-tone
+    radio() { noise(.09, .05, 2200, { q: 2, attack: .1 }); tone(1350, .05, "sine", .035, .08); tone(1050, .06, "sine", .03, .15); noise(.05, .03, 2600, { q: 3, when: .22, attack: .1 }); },
+    light() { tone(330, .28, "sine", .09); tone(165, .28, "triangle", .03); },
+    go() { tone(660, .5, "sine", .09); noise(1.2, .08, 300, { type: "lowpass", attack: .05, f2: 1800 }); },
+    // decision card: soft three-note chime
+    chime() { [784, 988, 1319].forEach((f, i) => { tone(f, .5, "triangle", .045, i * .09); tone(f * 2, .3, "sine", .012, i * .09); }); },
+    // crowd swell for overtakes and podiums
+    crowd(big) { noise(big ? 2.4 : 1.3, big ? .2 : .1, 1000, { q: .6, attack: .35 }); noise(big ? 2.2 : 1.1, big ? .1 : .05, 2400, { q: .8, attack: .4 }); },
+    sad() { tone(330, .25, "triangle", .05); tone(262, .35, "triangle", .05, .2); },
+    // safety car: two-tone alert
+    sc() { [0, .32].forEach(w => { tone(740, .14, "square", .03, w); tone(554, .14, "square", .03, w + .15); }); },
+    // pit stop: wheel guns (two bursts of rattles) and the jack drop
+    wheelGun() { for (let b = 0; b < 2; b++) for (let i = 0; i < 7; i++) noise(.025, .09, 3200, { type: "highpass", attack: .2, when: b * .45 + i * .032 }); noise(.12, .12, 180, { type: "lowpass", when: .95, attack: .05 }); },
+    whoosh(big) { noise(big ? .45 : .32, big ? .07 : .04, 400, { q: .9, attack: .5, f2: 2600 }); },
+    fastest() { tone(1047, .35, "sine", .05); tone(1568, .45, "sine", .04, .1); tone(2093, .3, "sine", .02, .2); },
+    bad() { tone(160, .3, "sawtooth", .05); tone(120, .35, "sawtooth", .04, .08); },
+    cheer() { this.crowd(true); [523, 659, 784, 1047].forEach((f, i) => tone(f, .35, "triangle", .07, .1 + i * .13)); },
+    finish() { [0, .18, .36].forEach((w, i) => tone([784, 988, 1175][i], .3, "square", .025, w)); this.crowd(true); },
+    // engine bed: two detuned saws through a lowpass, a filtered noise rumble, and a slow pass-by wobble
     humStart() {
       const a = ctx(); if (!a || hum) return;
-      const g = a.createGain(); g.gain.value = .0; g.connect(a.destination);
-      const lp = a.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 420; lp.connect(g);
-      const o1 = a.createOscillator(), o2 = a.createOscillator(); o1.type = "sawtooth"; o2.type = "sawtooth"; o1.frequency.value = 92; o2.frequency.value = 138.5;
-      const lfo = a.createOscillator(), lg = a.createGain(); lfo.frequency.value = .35; lg.gain.value = 18; lfo.connect(lg); lg.connect(o1.frequency); lg.connect(o2.frequency);
-      o1.connect(lp); o2.connect(lp); [o1, o2, lfo].forEach(o => o.start());
-      g.gain.linearRampToValueAtTime(.022, a.currentTime + 1.2);
-      hum = { g, nodes: [o1, o2, lfo], lp };
+      const g = a.createGain(); g.gain.value = 0; g.connect(master);
+      const lp = a.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 500; lp.Q.value = 2; lp.connect(g);
+      const o1 = a.createOscillator(), o2 = a.createOscillator(), o3 = a.createOscillator();
+      o1.type = "sawtooth"; o2.type = "sawtooth"; o3.type = "square"; o1.frequency.value = 96; o2.frequency.value = 97.5; o3.frequency.value = 192;
+      const g3 = a.createGain(); g3.gain.value = .25; o3.connect(g3).connect(lp);
+      const lfo = a.createOscillator(), lg = a.createGain(); lfo.frequency.value = .45; lg.gain.value = 22; lfo.connect(lg); [o1, o2, o3].forEach(o => lg.connect(o.frequency));
+      const rs = a.createBufferSource(); rs.buffer = noiseBuf; rs.loop = true;
+      const rf = a.createBiquadFilter(); rf.type = "lowpass"; rf.frequency.value = 220; const rg = a.createGain(); rg.gain.value = .5; rs.connect(rf).connect(rg).connect(g);
+      o1.connect(lp); o2.connect(lp); [o1, o2, o3, lfo, rs].forEach(o => o.start());
+      g.gain.linearRampToValueAtTime(.03, a.currentTime + 1.2);
+      hum = { g, nodes: [o1, o2, o3, lfo, rs], lp, o: [o1, o2, o3] };
     },
-    humRate(r) { if (hum && ac) hum.lp.frequency.value = 300 + r * 200; },
+    humRate(r) {
+      if (!hum || !ac) return; const t = ac.currentTime;
+      hum.lp.frequency.setTargetAtTime(380 + r * 160, t, .3);
+      const base = 92 + Math.log2(r + 1) * 22;
+      hum.o[0].frequency.setTargetAtTime(base, t, .4); hum.o[1].frequency.setTargetAtTime(base * 1.015, t, .4); hum.o[2].frequency.setTargetAtTime(base * 2, t, .4);
+    },
     humStop() { if (!hum || !ac) return; const h = hum; hum = null; h.g.gain.linearRampToValueAtTime(0, ac.currentTime + .5); setTimeout(() => h.nodes.forEach(o => { try { o.stop(); } catch (e) {} }), 700); },
   };
 })();
@@ -165,6 +215,43 @@ function dailyCard(onTitle) {
     <div class="muted" style="font-size:12px;margin-top:6px">${r ? `Come back tomorrow for #${d.n + 1}. ${streak > 1 ? `🔥 ${streak}-day streak.` : ""} <a href="#" data-a="daily" class="lnk">Race again (practice)</a>` : `A one-race challenge in a midfield car. It doesn't affect your career.${streak ? ` 🔥 ${streak}-day streak.` : ""}`}</div></div>`;
 }
 
+/* ---------- pit wall inbox: what needs a decision, with one-tap actions ---------- */
+function inboxItems() {
+  const s = S(), items = [];
+  const w = PW.wageBill(), spons = s.sponsors.reduce((a, x) => a + x.perRace, 0);
+  const net = PW.TV_PER_RACE + spons - w.total / 12 - PW.OPS_PER_RACE;
+  const free = PW.slots() - s.research.active.length;
+  if (free > 0) {
+    const sug = PW.suggestProject();
+    if (sug) items.push({ icon: "🔬", prio: 1, accept: { a: "research", v: sug.p.area, o: sug.p.opt },
+      title: `Research slot free${free > 1 ? ` (${free} slots)` : ""}`,
+      text: `Engineer suggests <b>${esc(sug.p.name)}</b>: +${sug.p.lo}–${sug.p.hi} ${PW.AREAS.find(a => a.id === sug.p.area).name}, ${M(sug.p.cost)}${sug.p.risk ? `, ${Math.round(sug.p.risk * 100)}% risk` : ""}. Because ${esc(sug.why)}.`,
+      actions: [`<button class="btn sm primary" data-a="research" data-v="${sug.p.area}" data-o="${sug.p.opt}">Start it</button>`, `<button class="btn sm ghost" data-a="tab" data-v="factory">Factory</button>`] });
+    else if (s.devSpent < PW.devCap()) items.push({ icon: "🔬", prio: 3, title: "Research slot free", text: "Nothing affordable right now. Projects open up as cash comes in.", actions: [`<button class="btn sm ghost" data-a="tab" data-v="factory">Factory</button>`] });
+  }
+  if (s.sponsors.length < PW.sponsorSlots() && s.sponsorOffers.length) {
+    const i = s.sponsorOffers.map((o, k) => ({ o, k })).sort((a, b) => b.o.perRace - a.o.perRace)[0];
+    items.push({ icon: "🤝", prio: 1, accept: { a: "sponsor", v: i.k }, title: "Sponsor slot open",
+      text: `Best offer: <b>${esc(i.o.name)}</b>, ${M(i.o.perRace)} a race, plus ${M(i.o.bonus)} if you ${esc(i.o.goal.text.charAt(0).toLowerCase() + i.o.goal.text.slice(1))}.`,
+      actions: [`<button class="btn sm primary" data-a="sponsor" data-v="${i.k}">Sign</button>`, `<button class="btn sm ghost" data-a="tab" data-v="sponsors">All offers</button>`] });
+  }
+  if ((s.fragility || 0) >= 3) items.push({ icon: "⚠️", prio: 2, title: `Car is fragile (${s.fragility.toFixed(1)})`, text: "Bold parts are raising the chance of mid-race mechanical problems. A Reliability project brings it down.", actions: [`<button class="btn sm ghost" data-a="tab" data-v="factory">Factory</button>`] });
+  PW.myDrivers().forEach(d => { if (d && d.morale < 45) items.push({ icon: "😠", prio: 2, title: `${esc(d.name)}'s morale is low (${d.morale})`, text: "Low morale costs lap time. Good results, a beaten teammate or a fan festival lift it. Team orders against them make it worse.", actions: [`<button class="btn sm ghost" data-a="tab" data-v="team">Team</button>`] }); });
+  const up = PW.ROLES.map(r => { const c = (s.staffMarket[r.id] || []).map((x, i) => ({ x, i })).sort((a, b) => b.x.rating - a.x.rating)[0]; return c && c.x.rating >= s.staff[r.id].rating + 10 && s.cash - c.x.fee > 12 ? { r, c } : null; }).filter(Boolean).sort((a, b) => (b.c.x.rating - s.staff[b.r.id].rating) - (a.c.x.rating - s.staff[a.r.id].rating))[0];
+  if (up) items.push({ icon: "🧑‍🔧", prio: 2, title: `Staff upgrade: ${up.r.name}`, text: `${esc(up.c.x.name)} (rated ${up.c.x.rating}, you have ${s.staff[up.r.id].rating}) is available for a ${M(up.c.x.fee)} fee and ${M(up.c.x.salary)} a season. ${up.r.perk}`, actions: [`<button class="btn sm primary" data-a="hire" data-v="${up.r.id}" data-i="${up.c.i}">Hire</button>`, `<button class="btn sm ghost" data-a="tab" data-v="team">Team</button>`] });
+  if (net < 0 || s.cash < 5) items.push({ icon: "💸", prio: 1, title: s.cash < 0 ? `Cash is negative (${M(s.cash)})` : net < 0 ? `Losing ${M(-net)} every race` : `Cash is low (${M(s.cash)})`, text: "Below −$10M the bank closes the team. Sign sponsors, avoid expensive hires, or hold off on research.", actions: [`<button class="btn sm ghost" data-a="tab" data-v="sponsors">Sponsors</button>`] });
+  if (s.round >= 8) S().drivers.filter(d => d.team === "you" && d.role !== "res" && d.contract <= 1).forEach(d => items.push({ icon: "📝", prio: 3, title: `${esc(d.name)}'s contract ends this season`, text: "You'll choose whether to renew at the season review. Check the driver market if you want an upgrade.", actions: [`<button class="btn sm ghost" data-a="tab" data-v="team">Driver market</button>`] }));
+  return items.sort((a, b) => a.prio - b.prio);
+}
+function inboxCard() {
+  const s = S(), items = inboxItems(), acc = items.filter(i => i.accept);
+  const board = `Board target: ${ord(s.board.target)} or better · now ${ord(PW.myPos())}`;
+  if (!items.length) return `<div class="card inbox calm"><div class="spread"><h3 style="margin:0">Pit wall inbox</h3><span class="muted" style="font-size:12px">${board}</span></div><p class="muted" style="margin:8px 0 0">All clear. Nothing needs a decision before the next race.</p></div>`;
+  return `<div class="card inbox"><div class="spread"><h3 style="margin:0">Pit wall inbox · ${items.length}</h3><span class="muted" style="font-size:12px">${board}</span></div>
+    ${items.map(i => `<div class="ibx p${i.prio}"><div class="ibi">${i.icon}</div><div class="ibt"><b>${i.title}</b><div>${i.text}</div></div><div class="iba">${i.actions.join("")}</div></div>`).join("")}
+    ${acc.length ? `<div class="row" style="margin-top:10px"><button class="btn sm" data-a="acceptall">✓ Accept all engineer's suggestions</button><span class="dim" style="font-size:12px">Fills free research slots with the engineer's picks${acc.some(a => a.accept.a === "sponsor") ? " and signs the best sponsor" : ""}.</span></div>` : ""}</div>`;
+}
+
 /* ---------- HQ ---------- */
 function pageHQ() {
   const s = S(), c = PW.circuit(), me = s.teams.you;
@@ -178,6 +265,7 @@ function pageHQ() {
   const [d1, d2] = PW.myDrivers();
   return `<div class="grid g-hq">
     <div class="grid">
+      ${inboxCard()}
       <div class="card team"><div class="hero">
         <div>
           <div class="round">Round ${s.round + 1} of 12 · ${esc(c.country)}</div>
@@ -191,7 +279,7 @@ function pageHQ() {
             <div class="trait"><span>Laps</span><b>${c.laps}</b></div>
             <div class="trait"><span>Our pace rank</span><b class="${myRank <= 3 ? "good" : myRank >= 8 ? "bad" : ""}">${ord(myRank)} of 10</b></div>
           </div>
-          <button class="btn go" data-a="weekend">Go to race weekend ›</button>
+          <div class="row"><button class="btn go" data-a="weekend">Race weekend ›</button><button class="btn" data-a="quick" title="The engineer runs practice and qualifying with their own picks. You go straight to the grid and strategy.">⚡ Quick weekend</button></div>
         </div>
         <canvas id="preview"></canvas>
       </div></div>
@@ -358,6 +446,34 @@ function practiceBonus(list) {
   if (list.includes("rel")) b.failMul = 0.6;
   return b;
 }
+function finishPractice() {
+  W.bonus = practiceBonus(W.practice);
+  if (W.practice.includes("setup")) { const st = S(), cc = PW.circuit(); W.advice = Object.keys(PW.SETUPS).sort((a, b) => PW.setupPerf(st.teams.you, cc, b) - PW.setupPerf(st.teams.you, cc, a))[0]; W.setup = W.advice; }
+}
+function runQuali() {
+  W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup, W.bonus);
+  W.pole = W.grid[0].mine ? W.grid[0].id : null; if (W.pole) toast("⏱️ Pole position!");
+  W.step = "grid"; W.animGrid = true;
+}
+function suggestPractice(c) {
+  const s = S(), picks = [];
+  if (c.pass < 0.7) picks.push("quali");
+  if (c.wear >= 1.1) picks.push("long");
+  if ((s.fragility || 0) >= 3 || s.teams.you.car.rel < 66) picks.push("rel");
+  ["setup", "long", "quali"].forEach(p => { if (!picks.includes(p)) picks.push(p); });
+  return picks.slice(0, 2);
+}
+// the engineer runs practice and qualifying with their picks; you land on the grid
+function quickWeekend() {
+  startWeekend();
+  W.practice = suggestPractice(PW.circuit());
+  finishPractice();
+  W.qualiMode = "std";
+  runQuali();
+  W.quick = true;
+  render(); window.scrollTo(0, 0);
+  toast(`Engineer ran ${W.practice.map(p => PRACTICE.find(x => x.id === p).name.toLowerCase()).join(" and ")}, ${PW.SETUPS[W.setup].name.toLowerCase()} setup. Qualified P${W.grid.findIndex(g => g.mine) + 1}.`);
+}
 function renderWeekend() {
   PW.screen = W.step === "grid" ? "strategy" : W.step;
   if (W.step === "race") return renderRace();
@@ -522,7 +638,20 @@ function updateRaceDom(full) {
     + (R.finished ? `<div style="grid-column:1/-1"><button class="btn go" data-pd="results">See results ›</button></div>` : ""));
   set("radio", R.radio.map(m => `<div class="msg ${m.kind}">${esc(m.text)}</div>`).join(""));
 }
-PW.onRadio = (text, kind) => { Snd.radio(); };
+PW.onRadio = (text, kind) => { if (R && R.started && !R.noPause) Snd.radio(); };
+PW.onEvent = (race, type, d) => {
+  if (!R || race !== R || !R.started || R.noPause) return;
+  if (type === "banner") {
+    if (d.kind === "purple") return Snd.fastest();
+    if (d.kind === "flag" && d.prio === 1) return Snd.finish();
+    if (d.kind === "good") { Snd.whoosh(true); return Snd.crowd(false); }
+    if (d.kind === "bad") return d.prio === 1 ? Snd.bad() : Snd.sad();
+    if (d.prio <= 2) return Snd.whoosh(d.prio === 1);
+  }
+  if (type === "sc") return Snd.sc();
+  if (type === "pit") return Snd.wheelGun();
+  if (type === "decision") return Snd.chime();
+};
 
 function teleCell(label, val, unit, cls, pct) {
   return `<div class="tc ${cls}"><span>${label}</span><b class="num">${val}<small>${unit}</small></b><i style="width:${Math.max(4, Math.min(100, pct))}%"></i></div>`;
@@ -709,12 +838,15 @@ app.addEventListener("click", e => {
     case "qmode": W.qualiMode = v; Snd.click(); render(); break;
     case "setup": W.setup = v; Snd.click(); render(); break;
     case "prac": { const i = W.practice.indexOf(v); if (i >= 0) W.practice.splice(i, 1); else if (W.practice.length < 2) W.practice.push(v); else { W.practice.shift(); W.practice.push(v); } Snd.click(); render(); break; }
-    case "pracdone": {
-      W.bonus = practiceBonus(W.practice);
-      if (W.practice.includes("setup")) { const st = S(), cc = PW.circuit(); W.advice = Object.keys(PW.SETUPS).sort((a, b) => PW.setupPerf(st.teams.you, cc, b) - PW.setupPerf(st.teams.you, cc, a))[0]; W.setup = W.advice; }
-      W.step = "quali"; Snd.click(); render(); window.scrollTo(0, 0); break;
+    case "pracdone": finishPractice(); W.step = "quali"; Snd.click(); render(); window.scrollTo(0, 0); break;
+    case "runquali": runQuali(); Snd.go(); render(); break;
+    case "quick": Snd.click(); quickWeekend(); break;
+    case "acceptall": {
+      let n = 0, guard = 0, sug;
+      while (guard++ < 3 && PW.slots() > S().research.active.length && (sug = PW.suggestProject()) && !PW.startResearch(sug.p.area, sug.p.opt)) n++;
+      inboxItems().filter(i => i.accept && i.accept.a === "sponsor").forEach(i => { if (!PW.signSponsor(+i.accept.v)) n++; });
+      toast(n ? `Done: ${n} suggestion${n > 1 ? "s" : ""} accepted` : "Nothing could be accepted"); Snd.click(); render(); break;
     }
-    case "runquali": W.grid = PW.runQualifying(W.qualiMode, W.wetStart, W.setup, W.bonus); W.pole = W.grid[0].mine ? W.grid[0].id : null; if (W.pole) toast("⏱️ Pole position!"); W.step = "grid"; W.animGrid = true; Snd.go(); render(); break;
     case "fuel": W.fuel = v; Snd.click(); render(); break;
     case "plan": W.plans[v] = W.presets.find(p => p.id === el.dataset.p); Snd.click(); render(); break;
     case "lightsout": R = PW.createRace(W.grid, W.plans, W.wetStart, W.qualiMode, W.setup, W.wx, W.bonus, W.fuel); R.autoPause = autoPausePref(); R.slowmo = (() => { try { return localStorage.getItem("pitwall-slowmo") !== "off"; } catch (e) { return true; } })(); W.step = "race"; window.scrollTo(0, 0); render(); break;

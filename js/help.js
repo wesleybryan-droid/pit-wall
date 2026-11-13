@@ -10,6 +10,7 @@ const teamName = () => (PW.state() ? PW.state().teams.you.name : "your team");
 // screen: which screen the step belongs to. sel: element to spotlight.
 // next: optional {label, go} to move to another screen. race: pause the race while showing.
 const STEPS = [
+  { screen: "hq", sel: ".inbox", title: "Your pit wall inbox", text: "Anything that needs a decision shows up here first: free research slots with your engineer's pick, sponsors, staff upgrades, money or morale problems. Tap an action, or <b>Accept all engineer's suggestions</b> to do the sensible thing in one go." },
   { screen: "hq", sel: ".hero", title: "Welcome to the pit wall", text: () => `You run <b>${esc(teamName())}</b>, the slowest team on the grid. This card is your next race. Each circuit rewards something different: check what it <b>favors</b>, the <b>tire wear</b>, the <b>rain chance</b> and how hard <b>overtaking</b> is.` },
   { screen: "hq", sel: ".cmp", title: "Where you stand", text: "This chart compares every car at this circuit. You start at the bottom. Upgrades close the gap, and each rating point is worth about 0.07 seconds a lap." },
   { screen: "hq", sel: "#status", title: "Money and the board", text: "Sponsors and TV money come in every race, and salaries and running costs go out. If cash falls below −$10M, the bank closes the team. The <b>board</b> also sets a target position each season. Hit it for a bonus. Miss it badly and they'll fire you." },
@@ -110,7 +111,7 @@ const GUIDE = `
 <p class="muted">You're the team principal of the slowest team on the grid. You never drive. You decide where the money goes, who drives, and what happens on race day. Turn the team into champions.</p>
 <h3>Between races</h3>
 <ul>
-<li><b>HQ:</b> your next circuit, how your car compares there, your money and the paddock news. Press <b>Go to race weekend</b> when you're ready.</li>
+<li><b>HQ:</b> the <b>pit wall inbox</b> lists what needs a decision, with one-tap actions and an "accept all" for the engineer's suggestions. Below it are your next circuit, how your car compares, your money and the paddock news. <b>Race weekend</b> lets you run every session yourself. <b>⚡ Quick weekend</b> lets the engineer run practice and qualifying and drops you on the grid.</li>
 <li><b>Factory:</b> start research projects to improve Aero, Engine, Chassis, Reliability and Tire Wear. Each project shows a forecast range, and you won't know the exact gain until it's done. Gains shrink as a rating nears the top. Bold projects gain more but can fail, and every bold part raises <b>fragility</b>, the chance of a mid-race mechanical problem (box to fix it, or nurse it in Save mode). Rivals upgrade every race and copy whoever leads an area.</li>
 <li><b>Team:</b> sign drivers and hire better staff. The Race Engineer, Pit Crew Chief and Technical Director make the biggest difference early on.</li>
 <li><b>Sponsors:</b> fill your slots. Each deal pays per race plus a bonus for hitting its goal.</li>

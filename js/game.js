@@ -101,6 +101,32 @@ PW.projectFor = function (area, opt) {
     risk: base.risk ? +clamp(base.risk * (1.3 - head / 100), 0.05, 0.6).toFixed(2) : 0,
   };
 };
+/* the engineer's pick for the next project: what the coming circuits reward, where we're furthest behind */
+PW.suggestProject = function () {
+  const next = PW.CIRCUITS.slice(S.round, S.round + 4);
+  if (!next.length) return null;
+  const w = { aero: 0, engine: 0, chassis: 0 };
+  next.forEach(c => { w.aero += c.aero; w.engine += c.power; w.chassis += c.mech; });
+  Object.keys(w).forEach(k => w[k] /= next.length);
+  const wearAvg = next.reduce((a, c) => a + c.wear, 0) / next.length;
+  const best = a => Math.max(...Object.values(S.teams).map(t => t.car[a]));
+  const me = S.teams.you.car, frag = S.fragility || 0;
+  const weight = { aero: w.aero, engine: w.engine, chassis: w.chassis, tyre: 0.12 + Math.max(0, wearAvg - 1) * 0.8, rel: frag >= 2.5 ? 0.6 : 0.12 + Math.max(0, 75 - me.rel) / 100 };
+  const cands = PW.AREAS.map(({ id, name }) => ({ id, name, score: weight[id] * (1 + Math.max(0, best(id) - me[id]) / 15) }))
+    .filter(x => !S.research.active.some(p => p.area === x.id)).sort((a, b) => b.score - a.score);
+  for (const c of cands) {
+    for (const opt of (frag < 2.5 ? ["bold", "safe"] : ["safe", "bold"])) {
+      const p = PW.projectFor(c.id, opt);
+      if (!p || PW.canStart(p)) continue;
+      if (opt === "bold" && (p.risk > 0.3 || S.cash - p.cost < 10)) continue;
+      const why = c.id === "rel" ? (frag >= 2.5 ? "the car is fragile from bold parts" : "reliability is a weak spot")
+        : c.id === "tyre" ? "tire wear matters at the coming tracks"
+        : `the next ${next.length} races favor ${c.name.toLowerCase()}${best(c.id) - me[c.id] > 4 ? `, and we're ${Math.round(best(c.id) - me[c.id])} points off the best` : ""}`;
+      return { p, why };
+    }
+  }
+  return null;
+};
 PW.dim = r => clamp(1 - (r - 70) / 30, 0.25, 1);
 PW.canStart = function (p) {
   if (!p) return "Not available";

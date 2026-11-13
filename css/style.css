@@ -366,3 +366,16 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 .lnk{color:var(--amber)}
 .sharebox{display:inline-block;text-align:left;background:var(--bg2);border:1px solid var(--line2);border-radius:10px;padding:10px 14px;margin:14px auto 0;font:13px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--text)}
 .card.daily{border-color:rgba(255,176,0,.5)}
+
+/* pit wall inbox */
+.inbox{padding:14px 16px;border-color:rgba(255,255,255,.12)}
+.inbox.calm{opacity:.85}
+.ibx{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.ibx:first-of-type{margin-top:8px}
+.ibi{font-size:20px;text-align:center}
+.ibt b{font-size:14px}
+.ibt div{font-size:13px;color:var(--muted);margin-top:2px}
+.ibt div b{color:var(--text);font-size:13px}
+.iba{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.ibx.p1 .ibi{filter:drop-shadow(0 0 6px rgba(255,176,0,.6))}
+@media (max-width:640px){.ibx{grid-template-columns:26px 1fr}.iba{grid-column:2;justify-content:flex-start}}
