@@ -39,6 +39,7 @@ PW.newCareer = function (teamName, color, opts) {
     sponsors: [], sponsorOffers: [], staffMarket: null, mods: { wearMul: 1, capCut: 0, aiDev: 1 }, ruleNote: "",
     news: [], lastResult: null, history: [], over: false, phase: "hq",
     board: { target: 9, conf: 60 }, trophies: {}, fragility: 0,
+    delegate: { research: false, sponsors: false, weekend: false, calls: false },
   };
   // two starter sponsors so the first races pay something
   S.sponsors.push(makeSponsor(0.9), makeSponsor(0.7));
@@ -56,7 +57,7 @@ PW.news = news;
 /* ---------- save / load ---------- */
 PW.save = () => { if (S && S.daily) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} if (PW.protectStorage) PW.protectStorage(); };
 PW.load = () => { try { const t = localStorage.getItem(SAVE_KEY); if (t) { S = JSON.parse(t); upgradeSave(); return S; } } catch (e) {} return null; };
-function upgradeSave() { if (S.fragility == null) S.fragility = 0; if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
+function upgradeSave() { if (!S.delegate) S.delegate = { research: false, sponsors: false, weekend: false, calls: false }; if (S.fragility == null) S.fragility = 0; if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
 PW.wipe = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = null; };
 
 /* ---------- lookups ---------- */
@@ -126,6 +127,37 @@ PW.suggestProject = function () {
     }
   }
   return null;
+};
+/* ---------- delegation: staff handle the routine jobs ---------- */
+PW.DELEGATE = [
+  { id: "research", role: "td",  name: "Research",        desc: "Fills free research slots with the engineer's pick after every race, keeping at least $8M in the bank." },
+  { id: "sponsors", role: "com", name: "Sponsors",        desc: "Signs the best-paying offer whenever a sponsor slot is open." },
+  { id: "weekend",  role: "re",  name: "Race weekends",   desc: "Runs Friday practice and qualifying with their own picks. You go straight to strategy on the grid." },
+  { id: "calls",    role: "re",  name: "Routine race calls", desc: "Handles heat, fuel, cold-tire and worn-tire calls without pausing, and switches the car back to normal once it's safe. You still get the safety car, rain, undercut and mechanical-problem calls." },
+];
+PW.setDelegate = function (id, on) {
+  S.delegate[id] = !!on;
+  const d = PW.DELEGATE.find(x => x.id === id), who = S.staff[d.role];
+  news(on ? `${who.name} (${PW.ROLES.find(r => r.id === d.role).name}) now handles ${d.name.toLowerCase()}.` : `You've taken ${d.name.toLowerCase()} back from your staff.`);
+  if (on) PW.runDelegation();
+  PW.save();
+};
+PW.runDelegation = function () {
+  const done = [];
+  if (!S.delegate) return done;
+  if (S.delegate.research) {
+    let guard = 0, sug;
+    while (guard++ < 3 && PW.slots() > S.research.active.length && (sug = PW.suggestProject()) && S.cash - sug.p.cost >= 8 && !PW.startResearch(sug.p.area, sug.p.opt)) done.push(`Technical Director started ${sug.p.name}`);
+  }
+  if (S.delegate.sponsors) {
+    while (S.sponsors.length < PW.sponsorSlots() && S.sponsorOffers.length) {
+      const i = S.sponsorOffers.map((o, k) => ({ o, k })).sort((a, b) => b.o.perRace - a.o.perRace)[0];
+      const name = i.o.name;
+      if (PW.signSponsor(i.k)) break;
+      done.push(`Commercial Director signed ${name}`);
+    }
+  }
+  return done;
 };
 PW.dim = r => clamp(1 - (r - 70) / 30, 0.25, 1);
 PW.canStart = function (p) {
@@ -340,6 +372,7 @@ PW.applyRace = function (res) {
   if (S.cash < -10) { S.over = true; S.overReason = "money"; news("The bank has called in the loans. The team is in administration.", "bad"); }
   S.phase = S.round >= PW.CIRCUITS.length ? "seasonEnd" : "hq";
   if (S.phase === "hq" && !S.over && Math.random() < 0.6) S.pendingEvent = rollEvent();
+  if (S.phase === "hq" && !S.over) report.delegated = PW.runDelegation();
   PW.save();
   return report;
 };
@@ -615,6 +648,7 @@ PW.finishSeason = function (renew) {
   S.sponsors = S.sponsors.filter(() => false);
   S.season++; S.round = 0; S.devSpent = 0; S.phase = "hq";
   refreshSponsorOffers(); refreshStaffMarket();
+  PW.runDelegation();
   news(`Season ${S.season} begins with the ${regs.name.toLowerCase()}. ${regs.text} Sign sponsors, the old deals have ended.`, "rule");
   PW.save();
 };

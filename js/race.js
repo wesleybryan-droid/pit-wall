@@ -134,6 +134,7 @@ PW.createRace = function (grid, plans, wetStart, qualiMode, setup, wx, bonus, fu
       wearMul: team.player ? (bonus.wearMul || 1) : 1, failMul: team.player ? (bonus.failMul || 1) : 1, perfBonus: team.player ? (bonus.perf || 0) : 0,
     };
   });
+  R.delegateCalls = !!(S.delegate && S.delegate.calls);
   R.cars.forEach(car => { car.perf += car.perfBonus; car.lapTime = lapTimeFor(R, car) + 3 + car.grid * 0.05; });
   R.lapPos.push(Object.fromEntries(R.cars.map((car, i) => [car.id, i + 1])));
   return R;
@@ -257,7 +258,21 @@ function slow(R, laps, why) {
 PW.slow = slow;
 
 /* ---------- decision moments: pause so the player can make the call ---------- */
+const ROUTINE = ["hot", "cold", "brakes", "engine", "fuel", "tyres"];
+// the race engineer takes routine calls without pausing when that's delegated
+function delegateCall(R, kind, title, suggest, extra) {
+  const cars = R.cars.filter(c => c.mine && !c.dnf && !c.finished && (!extra || !extra.car || c.id === extra.car));
+  cars.forEach(car => {
+    const acts = [];
+    const m = extra && extra.mode && extra.mode[car.id];
+    if (m && car.mode !== m) { car.mode = m; car.autoMode = true; car.autoPushUntil = m === "push" ? car.lapIdx + 2 : 0; car.lapTime = lapTimeFor(R, car); acts.push(m === "save" ? "switching to Save" : m === "push" ? "pushing for a couple of laps" : "back to Balanced"); }
+    const t = suggest && suggest[car.id];
+    if (t && kind === "tyres" && !car.pitReq) { car.pitReq = t; acts.push(`boxing for ${PW.TYRES[t].name}s`); }
+    if (acts.length) radio(R, `Engineer: ${title.replace(/^.*?'s /, car.code + "'s ")}. ${acts.join(" and ").replace(/^./, c => c.toUpperCase())}.`, "warn", car);
+  });
+}
 function decide(R, kind, title, text, suggest, extra) {
+  if (R.delegateCalls && ROUTINE.includes(kind) && !R.noPause) return delegateCall(R, kind, title, suggest, extra);
   if (!R.autoPause || R.noPause || !R.started || R.decision || R.leaderDone) return;
   const mine = R.cars.filter(c => c.mine && !c.dnf && !c.finished);
   if (!mine.length) return;
@@ -444,6 +459,11 @@ function teleChecks(R, car) {
   t.aheadHist.push(car.gapAheadS < 60 ? car.gapAheadS : null); t.aheadHist = t.aheadHist.slice(-4);
   t.behindHist.push(behindCar && !behindCar.dnf && behindCar.gapAheadS < 60 ? behindCar.gapAheadS : null); t.behindHist = t.behindHist.slice(-4);
   t.stuck = car.gapAheadS < 1.3 && !R.sc ? t.stuck + 1 : 0;
+  if (car.autoMode && !car.pitReq) {
+    const fd0 = PW.fuelDelta(R, car);
+    if (car.mode === "save" && t.tyre < 106 && t.brake < 870 && t.engine < 116 && fd0 > 0.1) { car.mode = "normal"; car.autoMode = false; car.lapTime = lapTimeFor(R, car); radio(R, `Engineer: ${car.code}'s temperatures and fuel are fine again. Back to Balanced.`, "", car); }
+    else if (car.mode === "push" && (car.lapIdx >= (car.autoPushUntil || 0) || fd0 < 0)) { car.mode = "normal"; car.autoMode = false; car.lapTime = lapTimeFor(R, car); radio(R, `Engineer: ${car.code} back to Balanced.`, "", car); }
+  }
   if (R.sc || car.lapIdx < 2 || rem < 2) return;
   const save = { mode: { [car.id]: "save" }, car: car.id }, saving = car.mode === "save";
   if (t.tyre > 112 && !saving && cool(car, "hot", 5)) decide(R, "hot", `${car.name}'s tires are overheating`, `Tires at ${Math.round(t.tyre)}°C. The working window is 95-105°C. Above it they lose grip and wear out fast. Switch to Save mode or back off out of the dirty air of the car ahead.`, {}, save);
@@ -654,7 +674,7 @@ PW.insights = function (R) {
 /* ---------- player controls ---------- */
 PW.boxCar = (R, car, tyre) => { car.pitReq = tyre; radio(R, `${car.code}: box, box. ${PW.TYRES[tyre].name}s ready.`, "", car); };
 PW.cancelBox = (R, car) => { car.pitReq = null; radio(R, `${car.code}: stay out, stay out.`, "", car); };
-PW.setMode = (R, car, m) => { car.mode = m; car.lapTime = lapTimeFor(R, car); };
+PW.setMode = (R, car, m) => { car.mode = m; car.autoMode = false; car.lapTime = lapTimeFor(R, car); };
 PW.setBoost = (R, car, on) => {
   if (on && (R.sc || car.ers < 5 || car.pitTimer > 0)) return false;
   car.boost = !!on; return true;

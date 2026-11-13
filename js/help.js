@@ -113,7 +113,7 @@ const GUIDE = `
 <ul>
 <li><b>HQ:</b> the <b>pit wall inbox</b> lists what needs a decision, with one-tap actions and an "accept all" for the engineer's suggestions. Below it are your next circuit, how your car compares, your money and the paddock news. <b>Race weekend</b> lets you run every session yourself. <b>⚡ Quick weekend</b> lets the engineer run practice and qualifying and drops you on the grid.</li>
 <li><b>Factory:</b> start research projects to improve Aero, Engine, Chassis, Reliability and Tire Wear. Each project shows a forecast range, and you won't know the exact gain until it's done. Gains shrink as a rating nears the top. Bold projects gain more but can fail, and every bold part raises <b>fragility</b>, the chance of a mid-race mechanical problem (box to fix it, or nurse it in Save mode). Rivals upgrade every race and copy whoever leads an area.</li>
-<li><b>Team:</b> sign drivers and hire better staff. The Race Engineer, Pit Crew Chief and Technical Director make the biggest difference early on.</li>
+<li><b>Team:</b> sign drivers and hire better staff. The Race Engineer, Pit Crew Chief and Technical Director make the biggest difference early on. Use <b>Delegation</b> to hand routine jobs to your staff: research picks, sponsor signing, running practice and qualifying, and routine race calls (heat, fuel and worn tires). You still make the big calls.</li>
 <li><b>Sponsors:</b> fill your slots. Each deal pays per race plus a bonus for hitting its goal.</li>
 <li><b>Standings:</b> both championships and the calendar.</li>
 <li><b>Paddock events:</b> between races you'll face decisions, like an unhappy driver, a rival poaching your staff, or a chance to buy factory overtime. Every choice has a trade-off.</li>

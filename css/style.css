@@ -404,3 +404,14 @@ html.bigtext body{zoom:1.12}
 .ins.undercut .ins-m i{background:var(--purple)} .ins.window .ins-m i{background:var(--amber)}
 .ins-d{display:flex;gap:4px;margin-top:7px} .ins-d i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)} .ins-d i.on{background:#fff}
 @media (max-width:640px){#rInsight{left:8px;right:8px;top:8px;width:auto}.ins{padding:7px 10px}.ins-b{font-size:19px}.ins-s{font-size:11px}}
+
+/* delegation switches */
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dsw{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;text-align:left;background:var(--bg2);border:1px solid var(--line2);border-radius:12px;padding:12px;color:var(--text);font:inherit;cursor:pointer}
+.dsw.on{border-color:var(--team);background:linear-gradient(135deg,rgba(255,255,255,.04),var(--bg2))}
+.tog{width:40px;height:22px;border-radius:12px;background:#2a3140;position:relative;transition:background .2s}
+.tog i{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#8b95a7;transition:all .2s}
+.dsw.on .tog{background:var(--team)} .dsw.on .tog i{left:21px;background:#fff}
+.dtx b{font-size:14px} .dtx small{display:block;font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35}
+.dst{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)} .dsw.on .dst{color:var(--team)}
+@media (max-width:760px){.dgrid{grid-template-columns:1fr}}

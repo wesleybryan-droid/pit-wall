@@ -221,7 +221,7 @@ function inboxItems() {
   const w = PW.wageBill(), spons = s.sponsors.reduce((a, x) => a + x.perRace, 0);
   const net = PW.TV_PER_RACE + spons - w.total / 12 - PW.OPS_PER_RACE;
   const free = PW.slots() - s.research.active.length;
-  if (free > 0) {
+  if (free > 0 && !(s.delegate && s.delegate.research)) {
     const sug = PW.suggestProject();
     if (sug) items.push({ icon: "🔬", prio: 1, accept: { a: "research", v: sug.p.area, o: sug.p.opt },
       title: `Research slot free${free > 1 ? ` (${free} slots)` : ""}`,
@@ -229,7 +229,7 @@ function inboxItems() {
       actions: [`<button class="btn sm primary" data-a="research" data-v="${sug.p.area}" data-o="${sug.p.opt}">Start it</button>`, `<button class="btn sm ghost" data-a="tab" data-v="factory">Factory</button>`] });
     else if (s.devSpent < PW.devCap()) items.push({ icon: "🔬", prio: 3, title: "Research slot free", text: "Nothing affordable right now. Projects open up as cash comes in.", actions: [`<button class="btn sm ghost" data-a="tab" data-v="factory">Factory</button>`] });
   }
-  if (s.sponsors.length < PW.sponsorSlots() && s.sponsorOffers.length) {
+  if (s.sponsors.length < PW.sponsorSlots() && s.sponsorOffers.length && !(s.delegate && s.delegate.sponsors)) {
     const i = s.sponsorOffers.map((o, k) => ({ o, k })).sort((a, b) => b.o.perRace - a.o.perRace)[0];
     items.push({ icon: "🤝", prio: 1, accept: { a: "sponsor", v: i.k }, title: "Sponsor slot open",
       text: `Best offer: <b>${esc(i.o.name)}</b>, ${M(i.o.perRace)} a race, plus ${M(i.o.bonus)} if you ${esc(i.o.goal.text.charAt(0).toLowerCase() + i.o.goal.text.slice(1))}.`,
@@ -279,7 +279,7 @@ function pageHQ() {
             <div class="trait"><span>Laps</span><b>${c.laps}</b></div>
             <div class="trait"><span>Our pace rank</span><b class="${myRank <= 3 ? "good" : myRank >= 8 ? "bad" : ""}">${ord(myRank)} of 10</b></div>
           </div>
-          <div class="row"><button class="btn go" data-a="weekend">Race weekend ›</button><button class="btn" data-a="quick" title="The engineer runs practice and qualifying with their own picks. You go straight to the grid and strategy.">⚡ Quick weekend</button></div>
+          ${s.delegate && s.delegate.weekend ? `<div class="row"><button class="btn go" data-a="weekend">Race weekend ›</button><button class="btn" data-a="weekendmanual" title="Run practice and qualifying yourself this time">Run it myself</button></div><div class="dim" style="font-size:12px;margin-top:6px">Your Race Engineer runs practice and qualifying (delegated).</div>` : `<div class="row"><button class="btn go" data-a="weekend">Race weekend ›</button><button class="btn" data-a="quick" title="The engineer runs practice and qualifying with their own picks. You go straight to the grid and strategy.">⚡ Quick weekend</button></div>`}
         </div>
         <canvas id="preview"></canvas>
       </div></div>
@@ -372,12 +372,20 @@ function pageTeam() {
   }).join("");
   const fa = PW.freeAgents().sort((a, b) => PW.ovr(b) - PW.ovr(a));
   return `<div class="grid g3" style="margin-bottom:16px">${driverCard(d1, "Driver 1")}${driverCard(d2, "Driver 2")}${driverCard(PW.reserve(), "Reserve")}</div>
+    <h2 style="margin:22px 0 12px">Delegation</h2>${delegationCard()}
     <h2 style="margin:22px 0 12px">Key staff</h2><div class="grid g3" id="staff" style="margin-bottom:16px">${staff}</div>
     <h2 style="margin:22px 0 12px">Driver market</h2>
     <div class="card" style="overflow-x:auto"><table><thead><tr><th>Driver</th><th>Age</th><th>OVR</th><th>Pace</th><th>Craft</th><th>Consis.</th><th>Tires</th><th>Wet</th><th>Asks</th><th>Sign as</th></tr></thead><tbody>
       ${fa.map(d => { const ask = PW.askSalary(d); return `<tr><td><span class="who">${face(d, 32)}<span><b>${esc(d.name)}</b> <span class="dim">${d.code}</span></span></span></td><td>${d.age}</td><td><span class="ovr num">${PW.ovr(d)}</span></td><td>${d.pace}</td><td>${d.racecraft}</td><td>${d.consistency}</td><td>${d.tyre}</td><td>${d.wet}</td><td class="num">${M(ask)}<div class="dim" style="font-size:11px">fee ${M(ask * .5)}</div></td>
         <td style="white-space:nowrap">${["d1", "d2", "res"].map(sl => `<button class="btn sm" data-a="sign" data-v="${d.id}" data-s="${sl}">${sl === "res" ? "Res" : sl.toUpperCase()}</button>`).join(" ")}</td></tr>`; }).join("")}
     </tbody></table><p class="muted" style="font-size:12px;margin:10px 0 0">Signing a driver into a seat releases whoever is in it (race drivers get a 30% payoff). Stars ask for more to join a team low in the standings.</p></div>`;
+}
+
+function delegationCard() {
+  const s = S();
+  return `<div class="card deleg"><p class="muted" style="margin:0 0 10px;font-size:13px">Hand routine jobs to your staff. Better-rated staff make better calls. Turn any switch off to take the job back.</p>
+    <div class="dgrid">${PW.DELEGATE.map(d => { const who = s.staff[d.role], on = s.delegate[d.id]; return `<button class="dsw ${on ? "on" : ""}" data-a="delegate" data-v="${d.id}" aria-pressed="${on}">
+      <span class="tog"><i></i></span><span class="dtx"><b>${d.name}</b><span class="dim"> · ${esc(who.name)} (${PW.ROLES.find(r => r.id === d.role).name}, ${who.rating})</span><small>${d.desc}</small></span><span class="dst">${on ? "Delegated" : "You"}</span></button>`; }).join("")}</div></div>`;
 }
 
 /* ---------- Sponsors ---------- */
@@ -794,6 +802,7 @@ function renderResults() {
       <div class="grid" style="align-content:start">
         <div class="card"><h3>Money</h3>${rep.finances.map(([k, v]) => `<div class="spread"><span>${k}</span><b class="num ${v >= 0 ? "good" : "bad"}">${M(v)}</b></div>`).join("")}<hr><div class="spread"><b>Net</b><b class="num ${rep.net >= 0 ? "good" : "bad"}">${M(rep.net)}</b></div><div class="spread muted"><span>Cash now</span><span class="num">${M(s.cash)}</span></div></div>
         ${rep.trophies && rep.trophies.length ? `<div class="card trophycard"><h3>Trophy unlocked!</h3>${rep.trophies.map(t => `<div class="spread" style="margin:6px 0"><span style="font-size:28px">${t.icon}</span><div style="flex:1"><b>${esc(t.name)}</b><div class="muted" style="font-size:12px">${esc(t.desc)}</div></div></div>`).join("")}</div>` : ""}
+        ${rep.delegated && rep.delegated.length ? `<div class="card"><h3>Your staff</h3>${rep.delegated.map(x => `<div>✓ ${esc(x)}</div>`).join("")}</div>` : ""}
         ${rep.research.length ? `<div class="card"><h3>Factory</h3>${rep.research.map(r => `<div class="${r.kind}">${r.kind === "good" ? "✔" : "✖"} ${esc(r.text)}</div>`).join("")}</div>` : ""}
         ${rep.sponsor.length ? `<div class="card"><h3>Sponsors</h3>${rep.sponsor.map(x => `<div class="good">★ ${esc(x)}</div>`).join("")}</div>` : ""}
         <div class="card"><h3>Driver morale</h3>${rep.morale.map(m => `<div class="spread"><span>${esc(m.name)}</span><span class="num ${m.delta >= 0 ? "good" : "bad"}">${m.delta >= 0 ? "+" : ""}${m.delta} → ${m.morale}</span></div>`).join("")}</div>
@@ -848,7 +857,9 @@ app.addEventListener("click", e => {
     case "swapres": result(PW.swapReserve(v), "Seats swapped"); break;
     case "sponsor": result(PW.signSponsor(+v), "Deal signed"); break;
     case "drop": if (confirm("End this sponsor deal early for a $1M fee?")) { PW.dropSponsor(+v); render(); } break;
-    case "weekend": Snd.click(); startWeekend(); window.scrollTo(0, 0); break;
+    case "weekend": Snd.click(); if (S().delegate && S().delegate.weekend) quickWeekend(); else startWeekend(); window.scrollTo(0, 0); break;
+    case "weekendmanual": Snd.click(); startWeekend(); window.scrollTo(0, 0); break;
+    case "delegate": PW.setDelegate(v, !S().delegate[v]); Snd.click(); render(); break;
     case "qmode": W.qualiMode = v; Snd.click(); render(); break;
     case "setup": W.setup = v; Snd.click(); render(); break;
     case "prac": { const i = W.practice.indexOf(v); if (i >= 0) W.practice.splice(i, 1); else if (W.practice.length < 2) W.practice.push(v); else { W.practice.shift(); W.practice.push(v); } Snd.click(); render(); break; }
