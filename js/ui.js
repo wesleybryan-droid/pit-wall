@@ -603,17 +603,26 @@ function updateRaceDom(full) {
   const order = PW.raceOrder(R), leader = order[0];
   const lap = Math.min(R.laps, Math.max(1, leader.lapIdx + 1));
   const set = (id, h) => { const el = document.getElementById(id); if (el && el.innerHTML !== h) el.innerHTML = h; };
+  // pop-ups only slide in when they first appear; later refreshes swap content in place
+  const setPop = (id, h, key) => {
+    const el = document.getElementById(id); if (!el || el._html === h) return;
+    const same = key && el.dataset.key === key, box = el.firstElementChild, st = box ? box.scrollTop : 0;
+    el.innerHTML = same ? h.replace(/class="(decision|ins) /, 'class="$1 still ') : h;
+    el._html = h; el.dataset.key = key || "";
+    if (same && el.firstElementChild) el.firstElementChild.scrollTop = st;
+  };
   set("rLap", R.finished ? `FINISHED <small>${R.laps} laps</small>` : `LAP ${lap}<small> / ${R.laps}</small>`);
   const slowmoOn = R.slowmo && R.speed > 1 && !R.paused && R.slowUntil > R.t && !R.finished;
   set("rFlag", (R.sc ? `<span class="flag sc">Safety car</span>` : R.wet ? `<span class="flag rain">Wet track</span>` : R.leaderDone ? `<span class="flag green">Chequered flag</span>` : "") + (slowmoOn ? `<span class="flag slowmo">Slow-mo · ${esc(R.slowWhy || "")}</span>` : ""));
   set("slBtn", R.slowmo ? "Slow-mo on" : "Slow-mo off");
-  set("rInsight", insightCard());
+  const ic = insightCard();
+  setPop("rInsight", ic, (ic.match(/ins-t">([^<]*)/) || [])[1] || "");
   const slb = document.getElementById("slBtn"); if (slb) slb.classList.toggle("on", R.slowmo);
   set("rWeather", (R.wet ? "🌧 Wet" : "☀ Dry") + (R.forecast ? (R.forecast.wet ? ` · rain ~L${R.forecast.lap}` : ` · drying ~L${R.forecast.lap}`) : ""));
   set("rGapMode", W.gapMode === "leader" ? "Gap to leader ⇄" : "Interval ⇄");
   set("apBtn", R.autoPause ? "Auto-pause on" : "Auto-pause off");
   const ap = document.getElementById("apBtn"); if (ap) ap.classList.toggle("on", R.autoPause);
-  set("rDecision", decisionCard());
+  setPop("rDecision", decisionCard(), R.decision ? R.decision.kind + R.decision.at : "");
   const bn = document.getElementById("rBanner");
   if (bn) {
     const b = PW.bannerTick(R, order);
@@ -700,9 +709,9 @@ function insightCard() {
   const now = performance.now();
   if (!R.insAt || now - R.insAt > 6500) { R.insAt = now; R.insIdx = (R.insIdx || 0) + 1; }
   const top = list.filter(x => x.prio <= 2), pool = top.length ? top.concat(list.filter(x => x.prio > 2).slice(0, 1)) : list;
-  const c = pool[R.insIdx % pool.length];
+  const c = pool[(R.insIdx || 0) % pool.length];
   const meter = c.pct != null ? `<div class="ins-m"><i style="width:${Math.round(c.pct * 100)}%"></i></div>` : "";
-  return `<div class="ins ${c.kind}"><div class="ins-t">${esc(c.title)}</div><div class="ins-b num">${esc(c.big)}</div>${meter}<div class="ins-s">${esc(c.sub)}</div>${pool.length > 1 ? `<div class="ins-d">${pool.map((_, i) => `<i class="${i === R.insIdx % pool.length ? "on" : ""}"></i>`).join("")}</div>` : ""}</div>`;
+  return `<div class="ins ${c.kind}"><div class="ins-t">${esc(c.title)}</div><div class="ins-b num">${esc(c.big)}</div>${meter}<div class="ins-s">${esc(c.sub)}</div>${pool.length > 1 ? `<div class="ins-d">${pool.map((_, i) => `<i class="${i === (R.insIdx || 0) % pool.length ? "on" : ""}"></i>`).join("")}</div>` : ""}</div>`;
 }
 function autoPausePref() { try { return localStorage.getItem("pitwall-autopause") !== "off"; } catch (e) { return true; } }
 function decisionCard() {
@@ -884,9 +893,24 @@ app.addEventListener("click", e => {
   }
 });
 // race controls use pointerdown so the 5x-a-second refresh can't swallow a click
+let tapStart = null;
+const tapSig = el => el ? [el.dataset.pd, el.dataset.v, el.dataset.t, el.dataset.m].join("|") : "";
 app.addEventListener("pointerdown", e => {
   const el = e.target.closest("[data-pd]"); if (!el || !R) return;
-  e.preventDefault();
+  tapStart = { sig: tapSig(el), x: e.clientX, y: e.clientY, mouse: e.pointerType === "mouse" };
+  if (tapStart.mouse) e.preventDefault();
+});
+app.addEventListener("pointercancel", () => { tapStart = null; });
+app.addEventListener("pointerup", e => {
+  const start = tapStart; tapStart = null;
+  if (!start || !R) return;
+  if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) return; // it was a scroll or drag
+  const under = document.elementFromPoint(e.clientX, e.clientY);
+  const el = under && under.closest("[data-pd]");
+  if (!el || tapSig(el) !== start.sig) return;
+  raceTap(el);
+});
+function raceTap(el) {
   const a = el.dataset.pd, v = el.dataset.v, car = R.cars.find(c => c.id === v);
   switch (a) {
     case "guide": PW.openGuide(); return;
@@ -906,7 +930,7 @@ app.addEventListener("pointerdown", e => {
   }
   Snd.click();
   updateRaceDom(true);
-});
+}
 document.addEventListener("keydown", e => {
   if (!R || e.target.tagName === "INPUT") return;
   if (e.key === " ") { e.preventDefault(); R.paused = !R.paused; if (!R.paused) R.decision = null; updateRaceDom(true); }
@@ -918,5 +942,5 @@ PW.load();
 render();
 // test hook: lets automated play-tests reach the live race and weekend
 PW.debug = { get R() { return R; }, get W() { return W; }, render };
-PW.ui = { get R() { return R; }, get W() { return W; }, render, startWeekend, setTab(t) { if (W) return; tab = t; render(); window.scrollTo(0, 0); }, reset() { W = null; R = null; Snd.humStop(); render(); } };
+PW.ui = { get R() { return R; }, get W() { return W; }, render, startWeekend, refresh() { if (R) updateRaceDom(true); }, setTab(t) { if (W) return; tab = t; render(); window.scrollTo(0, 0); }, reset() { W = null; R = null; Snd.humStop(); render(); } };
 })();
