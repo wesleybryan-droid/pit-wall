@@ -420,3 +420,10 @@ html.bigtext body{zoom:1.12}
 .decision.still,.ins.still{animation:none}
 /* race buttons: no accidental text selection or double-tap zoom */
 .race [data-pd]{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+
+/* driver traits */
+.trts{display:inline-flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.trt{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--bg2);border:1px solid var(--line2);color:#c9d1dd;cursor:help}
+.trt.c{padding:1px 4px;font-size:12px;border:0;background:none}
+.carctl .nm .trts{margin:0 0 0 4px;vertical-align:middle}
+td.trts{display:table-cell;white-space:nowrap}

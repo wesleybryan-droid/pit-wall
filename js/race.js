@@ -63,8 +63,9 @@ PW.runQualifying = function (mode, wet, setup, bonus) {
       if (!d) return;
       const perf = PW.setupPerf(team, c, team.player ? setup : PW.idealSetup(c));
       let t = c.base + (100 - perf) * 0.065 + (100 - d.pace) * 0.045 + PW.TYRES.S.pace + gauss() * (0.42 - d.consistency * 0.0035);
-      if (team.player) { t -= (S.staff.re.rating - 50) * 0.004; t += (60 - d.morale) * 0.006; if (mode === "max") t -= 0.25; t -= (bonus.quali || 0) + (bonus.perf || 0) * 0.065; }
-      if (wet) t += 6 + (100 - d.wet) * 0.06 + Math.abs(gauss()) * 0.4;
+      if (team.player) { t -= (S.staff.re.rating - 50) * 0.004; t += clamp((60 - d.morale) * 0.006, -0.12, 0.15); if (mode === "max") t -= 0.25; t -= (bonus.quali || 0) + (bonus.perf || 0) * 0.065; }
+      if (PW.hasT(d, "quali")) t -= 0.15;
+      if (wet) t += 6 + (100 - d.wet) * 0.06 + Math.abs(gauss()) * 0.4 - (PW.hasT(d, "rain") ? 0.3 : 0);
       entries.push({ id: d.id, code: d.code, name: d.name, team: team.id, color: team.color, time: t, mine: !!team.player });
     });
   });
@@ -148,7 +149,10 @@ function pickAiStart(c, team) {
 function lapTimeFor(R, car) {
   const S = PW.state(), c = R.c, d = car.d;
   let t = c.base + (100 - car.perf) * 0.065 + (100 - d.pace) * 0.045;
-  if (car.mine) { t -= (S.staff.re.rating - 50) * 0.004; t += (60 - d.morale) * 0.006; }
+  if (car.mine) { t -= (S.staff.re.rating - 50) * 0.004; t += clamp((60 - d.morale) * 0.006, -0.12, 0.15); } // morale matters, but can't sink a driver
+  if (PW.hasT(d, "hot")) t -= 0.08;
+  if (PW.hasT(d, "start") && car.lapIdx <= 0) t -= 0.5;
+  if (PW.hasT(d, "rain") && R.wet && car.tyre === "W") t -= 0.3;
   t += PW.TYRES[car.tyre].pace;
   const w = car.wear; t += 2.6 * w * w + (w > 1 ? (w - 1) * 8 : 0);
   t += 0.045 * (car.tel ? Math.max(0, car.tel.fuel) : Math.max(0, R.laps - Math.max(0, car.lapIdx)));
@@ -162,7 +166,7 @@ function lapTimeFor(R, car) {
   if (car.mode === "push") t -= 0.38; else if (car.mode === "save") t += 0.25;
   if (R.wet) { t += 6; t += car.tyre === "W" ? (100 - d.wet) * 0.05 : 7.5; }
   else if (car.tyre === "W") t += 4.2;
-  t += gauss() * (0.42 - d.consistency * 0.0035);
+  t += gauss() * (0.42 - d.consistency * 0.0035) * (PW.hasT(d, "calm") ? 0.8 : 1);
   if (R.sc) t = Math.max(t, c.base * 1.38);
   return t;
 }
@@ -171,6 +175,7 @@ function wearPerLap(R, car) {
   let w = 1 / (PW.TYRES[car.tyre].life / (R.c.wear * S.mods.wearMul) * (0.8 + car.tyreRating / 300));
   w *= car.mode === "push" ? 1.45 : car.mode === "save" ? 0.65 : 1;
   w *= 1.12 - car.d.tyre * 0.0025;
+  if (PW.hasT(car.d, "tyres")) w *= 0.9;
   if (car.tyre === "W" && !R.wet) w *= 3;
   if (car.tyre !== "W" && R.wet) w *= 0.6;
   if (R.sc) w *= 0.3;
@@ -344,7 +349,7 @@ function onCross(R, car) {
     if (car.tel.brake > 950) { fail += (car.tel.brake - 950) * 0.0012; failWhat = "Brakes"; }
     if (car.tel.engine > 125) { fail += (car.tel.engine - 125) * 0.0008; failWhat = "Engine overheating"; }
   }
-  const crash = 0.0004 + (100 - car.d.consistency) * 0.00002 + (R.wet ? (car.tyre === "W" ? 0.0015 : 0.012) : 0) + (car.mode === "push" ? 0.0015 : 0) + (car.wear > 1.1 ? 0.02 : 0);
+  const crash = (0.0004 + (100 - car.d.consistency) * 0.00002 + (R.wet ? (car.tyre === "W" ? 0.0015 : 0.012) : 0) + (car.mode === "push" ? 0.0015 : 0) + (car.wear > 1.1 ? 0.02 : 0)) * (PW.hasT(car.d, "hot") ? 1.4 : PW.hasT(car.d, "calm") ? 0.85 : 1);
   if (car.issue) fail += 0.06 * car.issue.sev * (car.mode === "save" ? 0.4 : car.mode === "push" ? 1.5 : 1);
   if (Math.random() < fail) {
     if (car.issue) failWhat = car.issue.part;
@@ -568,7 +573,7 @@ PW.stepRace = function (R, dt) {
     const effCar = car.lapTime / (car.boost ? BOOST_SPEED : 1), effAhead = ahead.lapTime / (ahead.boost ? BOOST_SPEED : 1);
     if (gapS < 0.55 && effCar < effAhead) {
       const delta = effAhead - effCar;
-      const pLap = R.c.pass * clamp(0.06 + delta * 0.45, 0, 0.9) * clamp(0.85 + (car.d.racecraft - ahead.d.racecraft) / 60, 0.4, 1.4) * PW.SETUPS[car.setup].pass / PW.SETUPS[ahead.setup].defend * (car.boost ? 1.5 : 1) / (ahead.boost ? 1.35 : 1);
+      const pLap = R.c.pass * clamp(0.06 + delta * 0.45, 0, 0.9) * clamp(0.85 + (car.d.racecraft - ahead.d.racecraft) / 60, 0.4, 1.4) * PW.SETUPS[car.setup].pass / PW.SETUPS[ahead.setup].defend * (car.boost ? 1.5 : 1) / (ahead.boost ? 1.35 : 1) * (PW.hasT(car.d, "racer") ? 1.2 : 1) / (PW.hasT(ahead.d, "wall") ? 1.15 : 1);
       if (Math.random() < pLap / car.lapTime * dt * 2.2) {
         car.dist = ahead.dist + 0.0012; ahead.dist -= 0.0006;
         R.flash[car.id] = R.t;
@@ -690,8 +695,12 @@ PW.canSwap = R => {
 PW.swapCars = R => {
   const s = PW.canSwap(R); if (!s) return;
   const fd = s.front.dist; s.front.dist = s.back.dist - 0.0005; s.back.dist = fd + 0.0005;
-  s.front.moraleDelta -= 12; s.back.moraleDelta += 4;
-  radio(R, `${s.front.code}: let ${s.back.code} through. Team orders. (Not a happy driver.)`, "warn", s.front);
+  const no1 = PW.state().numberOne;
+  let hit = PW.hasT(s.front.d, "team") ? 4 : PW.hasT(s.front.d, "ego") ? 20 : 12;
+  if (no1 === s.back.id) hit *= 0.5; else if (no1 === s.front.id) hit *= 1.5;
+  s.front.moraleDelta -= Math.round(hit); s.back.moraleDelta += PW.hasT(s.back.d, "ego") ? 8 : 4;
+  const mood = hit <= 5 ? "Understood, letting them by." : hit >= 18 ? "You're kidding me! ...Fine." : "Copy. (Not a happy driver.)";
+  radio(R, `${s.front.code}: let ${s.back.code} through. Team orders. ${mood}`, "warn", s.front);
 };
 
 /* ---------- headless run (for testing and "sim to end") ---------- */

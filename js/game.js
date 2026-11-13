@@ -20,7 +20,7 @@ PW.newCareer = function (teamName, color, opts) {
     car: { aero: 61, engine: 62, chassis: 63, rel: 65, tyre: 62 } };
 
   const drivers = PW.DRIVERS.map(([name, code, age, pace, racecraft, consistency, tyre, wet, team]) => {
-    const d = { id: code, name, code, age, pace, racecraft, consistency, tyre, wet, morale: 65, points: 0, wins: 0, podiums: 0, careerPts: 0 };
+    const d = { id: code, name, code, age, pace, racecraft, consistency, tyre, wet, morale: 65, points: 0, wins: 0, podiums: 0, careerPts: 0, traits: (PW.START_TRAITS[code] || []).slice() };
     d.salary = PW.driverSalary(d);
     if (team === "you") { d.team = "you"; d.role = null; d.contract = randi(1, 2); }
     else if (team === "you-r") { d.team = "you"; d.role = "res"; d.contract = 1; d.salary = 0.4; }
@@ -38,7 +38,7 @@ PW.newCareer = function (teamName, color, opts) {
     research: { active: [], tier: Object.fromEntries(PW.AREAS.map(a => [a.id, 0])) },
     sponsors: [], sponsorOffers: [], staffMarket: null, mods: { wearMul: 1, capCut: 0, aiDev: 1 }, ruleNote: "",
     news: [], lastResult: null, history: [], over: false, phase: "hq",
-    board: { target: 9, conf: 60 }, trophies: {}, fragility: 0,
+    board: { target: 9, conf: 60 }, trophies: {}, fragility: 0, numberOne: null,
     delegate: { research: false, sponsors: false, weekend: false, calls: false },
   };
   // two starter sponsors so the first races pay something
@@ -57,7 +57,7 @@ PW.news = news;
 /* ---------- save / load ---------- */
 PW.save = () => { if (S && S.daily) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} if (PW.protectStorage) PW.protectStorage(); };
 PW.load = () => { try { const t = localStorage.getItem(SAVE_KEY); if (t) { S = JSON.parse(t); upgradeSave(); return S; } } catch (e) {} return null; };
-function upgradeSave() { if (!S.delegate) S.delegate = { research: false, sponsors: false, weekend: false, calls: false }; if (S.fragility == null) S.fragility = 0; if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
+function upgradeSave() { S.drivers.forEach(d => { if (!d.traits) d.traits = PW.START_TRAITS[d.id] ? PW.START_TRAITS[d.id].slice() : PW.randomTraits(); }); if (S.numberOne === undefined) S.numberOne = null; if (!S.delegate) S.delegate = { research: false, sponsors: false, weekend: false, calls: false }; if (S.fragility == null) S.fragility = 0; if (!S.board) S.board = { target: S.season === 1 ? 9 : 8, conf: 60 }; if (!S.trophies) S.trophies = {}; }
 PW.wipe = () => { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = null; };
 
 /* ---------- lookups ---------- */
@@ -272,6 +272,28 @@ PW.signDriver = function (id, slot) {
   news(`Signed ${d.name} as ${slot === "res" ? "reserve" : "race driver"} for ${PW.money(salary)} a season.`, "good");
   PW.save(); return "";
 };
+PW.setNumberOne = function (id) {
+  const was = S.numberOne; S.numberOne = id || null;
+  PW.myDrivers().forEach(d => {
+    if (!d) return;
+    if (d.id === id) { d.morale = clamp(d.morale + (PW.hasT(d, "ego") ? 10 : 5), 15, 100); }
+    else if (id && !PW.hasT(d, "team")) { d.morale = clamp(d.morale - (PW.hasT(d, "ego") ? 10 : 5), 15, 100); }
+    else if (!id && was === d.id) { d.morale = clamp(d.morale - (PW.hasT(d, "ego") ? 8 : 3), 15, 100); }
+  });
+  const d = S.drivers.find(x => x.id === id);
+  news(id ? `${d.name} is now the team's number one.` : "Both drivers are now treated equally.");
+  PW.save();
+};
+PW.talkTo = function (id) {
+  const d = S.drivers.find(x => x.id === id); if (!d) return "No driver";
+  const key = S.season * 100 + S.round;
+  if (d.talked === key) return "You already talked this weekend";
+  d.talked = key;
+  const gain = PW.hasT(d, "ego") && S.numberOne !== d.id ? 3 : PW.hasT(d, "hot") ? 8 : 6;
+  d.morale = clamp(d.morale + gain, 15, 100);
+  news(`You talked things through with ${d.name}. Morale +${gain}.`);
+  PW.save(); return "";
+};
 PW.swapReserve = function (slot) {
   const r = PW.reserve(), d = S.drivers.find(x => x.team === "you" && x.role === slot);
   if (!r || !d) return "No reserve";
@@ -328,6 +350,7 @@ PW.applyRace = function (res) {
     if (d) { d.points += pts; d.careerPts += pts; if (i === 0 && !e.dnf) d.wins++; if (i < 3 && !e.dnf) d.podiums++; }
     S.teams[e.team].points += pts;
   });
+  if (S.numberOne && !PW.myDrivers().some(d => d && d.id === S.numberOne)) S.numberOne = null;
   const mine = res.classified.map((e, i) => ({ ...e, pos: i + 1 })).filter(e => e.team === "you");
   // morale
   mine.forEach(e => {
@@ -336,7 +359,12 @@ PW.applyRace = function (res) {
     if (e.dnf) dm -= 3; else if (e.pos <= 10) dm += 4;
     if (mate && !e.dnf && (mate.dnf || e.pos < mate.pos)) dm += 3; else if (mate) dm -= 2;
     if (e.pos <= 3 && !e.dnf) dm += 8;
-    dm += (60 - d.morale) * 0.1;
+    dm *= PW.hasT(d, "hot") ? 1.3 : PW.hasT(d, "calm") ? 0.7 : 1;
+    if (S.numberOne) {
+      if (S.numberOne === d.id) dm += PW.hasT(d, "ego") ? 4 : 2;
+      else if (!PW.hasT(d, "team")) dm -= PW.hasT(d, "ego") ? 5 : 2;
+    }
+    dm += (60 - d.morale) * (d.morale < 40 ? 0.18 : 0.1); // morale recovers faster from a low
     d.morale = clamp(Math.round(d.morale + dm + (e.moraleDelta || 0)), 15, 100);
     report.morale.push({ name: d.name, delta: Math.round(dm + (e.moraleDelta || 0)), morale: d.morale });
   });
@@ -353,6 +381,7 @@ PW.applyRace = function (res) {
   const spons = S.sponsors.reduce((a, s) => a + s.perRace, 0);
   const lines = [
     ["TV and prize money", PW.TV_PER_RACE], ["Sponsors", spons],
+    ...(PW.myDrivers().some(d => PW.hasT(d, "media")) && spons > 0 ? [["Media darling bonus", +(spons * 0.1).toFixed(2)]] : []),
     ["Driver salaries", -w.drivers / 12], ["Staff salaries", -w.staff / 12], ["Operations", -PW.OPS_PER_RACE],
   ];
   if (res.damageCost) lines.push(["Crash repairs", -res.damageCost]);
@@ -439,7 +468,7 @@ const EVENTS = {
     view: x => { const d = findD(x.d); return { title: `${d.name} wants number-one status`, text: `${d.name} (morale ${d.morale}) feels the team favors their teammate and wants to be the priority in strategy calls.`,
       choices: [{ label: "Give them #1 status", desc: "+15 morale for them, −10 for their teammate" }, { label: "Pay a loyalty bonus", desc: "−$1M, +8 morale" }, { label: "Refuse", desc: "−10 morale" }] }; },
     apply: [
-      x => { const d = findD(x.d), m = PW.myDrivers().find(o => o && o.id !== x.d); d.morale = clamp(d.morale + 15, 15, 100); if (m) m.morale = clamp(m.morale - 10, 15, 100); return `${d.name} is now the team's number one. Their teammate is not pleased.`; },
+      x => { const d = findD(x.d), m = PW.myDrivers().find(o => o && o.id !== x.d); S.numberOne = d.id; d.morale = clamp(d.morale + 15, 15, 100); if (m && !PW.hasT(m, "team")) m.morale = clamp(m.morale - 10, 15, 100); return `${d.name} is now the team's number one.${m && !PW.hasT(m, "team") ? " Their teammate is not pleased." : ""}`; },
       x => { const d = findD(x.d); S.cash -= 1; d.morale = clamp(d.morale + 8, 15, 100); return `${d.name} accepts the bonus and calms down.`; },
       x => { const d = findD(x.d); d.morale = clamp(d.morale - 10, 15, 100); return `${d.name} storms out of the meeting.`; },
     ],
@@ -594,6 +623,11 @@ PW.finishSeason = function (renew) {
   if (sum.board.fired) { S.over = true; S.overReason = "fired"; news("The board has lost confidence. You have been replaced as team principal.", "bad"); PW.save(); return; }
   sum.beat.forEach(b => { if (b.ok) { S.cash += b.s.bonus; } });
   S.history.push({ season: S.season, final: sum.pos, points: S.teams.you.points });
+  // mentors: a younger teammate gains a little extra
+  Object.keys(S.teams).forEach(id => {
+    const ds = S.drivers.filter(d => d.team === id && d.role !== "res");
+    ds.forEach(m => { if (!PW.hasT(m, "mentor")) return; ds.forEach(y => { if (y !== m && m.age - y.age >= 5) { y.pace = Math.min(99, y.pace + 1); y.racecraft = Math.min(99, y.racecraft + 1); if (id === "you") news(`${m.name} mentored ${y.name} this season: +1 pace and racecraft.`, "good"); } }); });
+  });
   // contracts and ageing
   S.drivers.forEach(d => {
     if (d.team) d.contract--;
@@ -657,7 +691,7 @@ function rookie() {
   const code = name.split(" ")[1].slice(0, 3).toUpperCase();
   const b = randi(70, 80);
   const female = PW.FEMALE_FIRST.includes(name.split(" ")[0]);
-  const d = { id: code + randi(10, 99), name, code, face: pick(PW.ROOKIE_FACES[female ? "f" : "m"]), age: randi(18, 20), pace: b + randi(0, 4), racecraft: b - randi(2, 7), consistency: b - randi(4, 10), tyre: b - randi(2, 6), wet: b + randi(-4, 4), morale: 70, points: 0, wins: 0, podiums: 0, careerPts: 0, team: "", role: null, contract: 0 };
+  const d = { id: code + randi(10, 99), name, code, face: pick(PW.ROOKIE_FACES[female ? "f" : "m"]), age: randi(18, 20), pace: b + randi(0, 4), racecraft: b - randi(2, 7), consistency: b - randi(4, 10), tyre: b - randi(2, 6), wet: b + randi(-4, 4), morale: 70, points: 0, wins: 0, podiums: 0, careerPts: 0, team: "", role: null, contract: 0, traits: PW.randomTraits() };
   d.salary = PW.driverSalary(d);
   return d;
 }

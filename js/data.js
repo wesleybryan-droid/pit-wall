@@ -46,6 +46,24 @@ PW.DRIVERS = [
   ["Pavel Ivanov", "IVA", 24, 74, 73, 72, 76, 79, ""], ["Ethan Cole", "COL", 18, 79, 70, 65, 70, 76, ""],
   ["Rafael Duarte", "DUA", 30, 78, 80, 79, 77, 81, ""], ["Mika Salonen", "SAL", 23, 77, 76, 74, 78, 80, ""],
 ];
+/* ---------- driver personalities ---------- */
+PW.TRAITS = {
+  rain:   { name: "Rain master",     icon: "🌧", desc: "About 0.3s a lap faster in the wet." },
+  tyres:  { name: "Tire whisperer",  icon: "🛞", desc: "Tires wear about 10% slower." },
+  quali:  { name: "Qualifying ace",  icon: "⏱", desc: "About 0.15s faster over one lap in qualifying." },
+  racer:  { name: "Overtaker",       icon: "⚔", desc: "20% better at making passes stick." },
+  wall:   { name: "Defender",        icon: "🛡", desc: "15% harder to pass." },
+  start:  { name: "Fast starter",    icon: "🚦", desc: "Gains about half a second on the opening lap." },
+  calm:   { name: "Ice cool",        icon: "🧊", desc: "More consistent lap to lap, crashes less, and morale swings are smaller." },
+  hot:    { name: "Hot-headed",      icon: "🔥", desc: "A touch faster on the limit but crashes more, and morale swings are bigger." },
+  team:   { name: "Team player",     icon: "🤝", desc: "Accepts team orders and number-two status without sulking." },
+  ego:    { name: "Big ego",         icon: "👑", desc: "Hates team orders and being number two. Loves being number one." },
+  mentor: { name: "Mentor",          icon: "🎓", desc: "A younger teammate improves faster each season." },
+  media:  { name: "Media darling",   icon: "📸", desc: "Sponsors pay 10% more while they race for you." },
+};
+PW.START_TRAITS = { MAR: ["quali", "ego"], BRT: ["calm", "team"], OKA: ["racer", "media"], LUN: ["mentor", "calm"], VID: ["racer"], WHI: ["hot", "start"], ARI: ["tyres", "calm"], HAD: ["quali", "rain"], GAU: ["mentor", "wall"], CAS: ["wall", "team"], PET: ["rain", "hot"], WEB: ["tyres", "team"], SAN: ["hot", "racer"], LEF: ["mentor", "wall"], MEN: ["start", "media"], LIN: ["rain"], NOV: ["team", "tyres"], HAR: ["racer", "hot"], REI: ["team", "tyres"], BEL: ["wall", "calm"], SHA: ["start", "media"], MOR: ["rain", "racer"], KOW: ["mentor", "calm"], REY: ["rain", "media"], KEL: ["tyres"], IVA: ["hot", "wall"], COL: ["start", "ego"], DUA: ["racer", "media"], SAL: ["calm", "quali"] };
+PW.hasT = (d, t) => !!(d && d.traits && d.traits.includes(t));
+PW.randomTraits = () => { const keys = Object.keys(PW.TRAITS).filter(k => k !== "mentor"); const a = PW.pick(keys); let b = PW.pick(keys); const clash = { calm: "hot", hot: "calm", team: "ego", ego: "team" }; return Math.random() < 0.45 && b !== a && clash[a] !== b ? [a, b] : [a]; };
 PW.ovr = d => Math.round((d.pace * 3 + d.racecraft + d.consistency + d.tyre + d.wet) / 7);
 PW.driverSalary = d => +Math.max(0.4, Math.pow(Math.max(0, PW.ovr(d) - 68) / 24, 2.1) * 18 * (d.age <= 22 ? 0.75 : 1)).toFixed(2);
 

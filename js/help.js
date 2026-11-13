@@ -17,7 +17,7 @@ const STEPS = [
   { screen: "hq", sel: '.tab[data-v="factory"]', title: "Upgrade the car", text: "The Factory is where races are really won. Let's look.", next: { label: "Open the Factory ›", go: () => PW.ui.setTab("factory") } },
   { screen: "factory", sel: ".areas", title: "Research projects", text: "Each area has three tiers of upgrades. <b>Safe</b> projects always deliver. <b>Bold</b> ones give roughly double the gain but can fail in testing and waste the money. Match your upgrades to the circuits ahead: Aero for twisty tracks, Engine for fast ones." },
   { screen: "factory", sel: ".slots", title: "Slots and the budget cap", text: "You can run two projects at once (three with a Technical Director rated 80+). Projects finish after the number of races shown. A season-wide development cap limits total spending. <b>Tip:</b> start a project before your first race.", next: { label: "Open the Team ›", go: () => PW.ui.setTab("team") } },
-  { screen: "team", sel: ".g3", title: "Your drivers", text: "<b>Pace</b> is raw speed, <b>Craft</b> is overtaking and defending, <b>Consistency</b> avoids mistakes, <b>Tires</b> makes them last, and <b>Wet</b> is rain skill. Morale goes up with good results and down when they lose to their teammate or you use team orders. You can sign better drivers from the market below." },
+  { screen: "team", sel: ".g3", title: "Your drivers", text: "<b>Pace</b> is raw speed, <b>Craft</b> is overtaking and defending, <b>Consistency</b> avoids mistakes, <b>Tires</b> makes them last, and <b>Wet</b> is rain skill. Each driver has one or two <b>traits</b> (hover or tap the icons). Morale goes up with good results and down when they lose to their teammate or you use team orders. <b>Make number one</b> boosts one driver at the other's expense, and <b>Talk it through</b> lifts a low mood once per weekend." },
   { screen: "team", sel: "#staff", title: "Key staff", text: "Every staff member changes the game. A better Race Engineer gives smarter strategy calls, a better Pit Crew Chief gives faster stops, and so on. Hire upgrades when you can afford them.", next: { label: "Open Sponsors ›", go: () => PW.ui.setTab("sponsors") } },
   { screen: "sponsors", sel: ".page", title: "Sponsors", text: "Sponsors pay every race, plus a bonus for hitting their goal. You have two slots (three with a Commercial Director rated 80+). New offers arrive every three races, and better results bring bigger deals.", next: { label: "Back to HQ ›", go: () => PW.ui.setTab("hq") } },
   { screen: "hq", sel: '[data-a="weekend"]', title: "Race weekend", text: "When you're ready, start the race weekend. The walkthrough will pick up there.", done: "Got it" },
@@ -117,6 +117,15 @@ const GUIDE = `
 <li><b>Sponsors:</b> fill your slots. Each deal pays per race plus a bonus for hitting its goal.</li>
 <li><b>Standings:</b> both championships and the calendar.</li>
 <li><b>Paddock events:</b> between races you'll face decisions, like an unhappy driver, a rival poaching your staff, or a chance to buy factory overtime. Every choice has a trade-off.</li>
+</ul>
+<h3>Driver personalities</h3>
+<p>Every driver has one or two traits, shown as icons on their card, in the market and on the race controls. Hover or tap one to see what it does.</p>
+<ul>
+<li><b>On track:</b> 🌧 Rain master, 🛞 Tire whisperer, ⏱ Qualifying ace, ⚔ Overtaker, 🛡 Defender, 🚦 Fast starter.</li>
+<li><b>Temperament:</b> 🧊 Ice cool (steady, crashes less, calmer moods) and 🔥 Hot-headed (a touch faster, but crashes more and moods swing harder).</li>
+<li><b>In the team:</b> 🤝 Team player (fine with team orders and being number two), 👑 Big ego (hates both), 🎓 Mentor (a much younger teammate improves faster each season), 📸 Media darling (sponsors pay 10% more).</li>
+<li><b>Number one:</b> name a lead driver on the Team screen. They get a morale lift and take team orders better. Their teammate's morale slowly drops, unless they're a team player. You can make them equal again at any time.</li>
+<li><b>Talk it through:</b> once per race weekend you can sit down with an unhappy driver for a morale boost. Very low morale also recovers a little faster on its own.</li>
 </ul>
 <h3>Race weekend</h3>
 <ol>
