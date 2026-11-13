@@ -379,3 +379,28 @@ tr.me td{background:rgba(255,255,255,.04);font-weight:700}
 .iba{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .ibx.p1 .ibi{filter:drop-shadow(0 0 6px rgba(255,176,0,.6))}
 @media (max-width:640px){.ibx{grid-template-columns:26px 1fr}.iba{grid-column:2;justify-content:flex-start}}
+
+/* colour is never the only signal */
+.tc span em{font-style:normal;float:right;font-size:9px;font-weight:900;letter-spacing:.06em;padding:0 4px;border-radius:3px;background:rgba(255,255,255,.08)}
+.tc span em.tag-bad{background:var(--red);color:#fff} .tc span em.tag-warn{background:var(--amber);color:#1d1400} .tc span em.tag-cold{background:var(--blue);color:#fff} .tc span em.tag-good{color:var(--green)}
+.mv{font-size:10px;margin-left:3px} .mv.up{color:var(--green)} .mv.dn{color:var(--red)}
+/* colour-blind palette (Okabe-Ito): good = sky blue, bad = vermillion, warn = yellow, cold/wet = reddish purple */
+html.cb{--green:#56B4E9;--red:#D55E00;--amber:#F0E442;--blue:#CC79A7}
+html.cb .tc.bad b,html.cb .news li.bad .msg,html.cb .radio .msg.bad{color:#ff9d5c}
+html.cb .news li.good .msg,html.cb .radio .msg.good{color:#9fd4f5}
+/* larger text */
+html.bigtext body{zoom:1.12}
+
+/* broadcast insight cards */
+#rInsight{position:absolute;right:12px;top:12px;z-index:3;width:min(270px,46%);pointer-events:none}
+#rInsight:empty{display:none}
+.ins{background:linear-gradient(160deg,rgba(23,28,39,.94),rgba(11,13,18,.94));border:1px solid rgba(255,255,255,.1);border-left:4px solid var(--team);border-radius:0 10px 10px 0;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.5);animation:tvin .35s ease-out;backdrop-filter:blur(6px)}
+.ins.undercut{border-left-color:var(--purple)} .ins.window{border-left-color:var(--amber)} .ins.battle{border-left-color:var(--green)} .ins.defend{border-left-color:var(--red)} .ins.pace{border-left-color:#fff} .ins.tyres{border-left-color:var(--green)}
+.ins-t{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.ins-b{font-size:26px;font-weight:900;line-height:1.1;margin:2px 0 4px;letter-spacing:.01em}
+.ins-s{font-size:12px;color:#c9d1dd;line-height:1.35}
+.ins-m{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin:2px 0 6px}
+.ins-m i{display:block;height:100%;background:var(--team)}
+.ins.undercut .ins-m i{background:var(--purple)} .ins.window .ins-m i{background:var(--amber)}
+.ins-d{display:flex;gap:4px;margin-top:7px} .ins-d i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.2)} .ins-d i.on{background:#fff}
+@media (max-width:640px){#rInsight{left:8px;right:8px;top:8px;width:auto}.ins{padding:7px 10px}.ins-b{font-size:19px}.ins-s{font-size:11px}}

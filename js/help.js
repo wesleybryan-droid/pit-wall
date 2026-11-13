@@ -149,6 +149,7 @@ const GUIDE = `
 <li><b>Fuel:</b> laps spare or short at the current rate. Pushing and boosting burn more, and Save uses about 10% less. Choose a Light, Standard or Heavy fuel load before the race.</li>
 <li><b>Gaps:</b> the gaps ahead and behind with their trend per lap (▼ closing, ▲ opening), and where you'd rejoin if you boxed now.</li>
 <li>The race pauses for overheating, low fuel, cold tires, a rival trying to undercut you, and undercut chances of your own.</li>
+<li><b>Insight cards</b> (top right of the map) rotate through the strategy numbers that matter: your pit window, battle forecasts, who's closing on you, your undercut chance on the car ahead, and the fastest car on track.</li>
 </ul>
 <h3>Things that change races</h3>
 <ul>
@@ -165,6 +166,11 @@ const GUIDE = `
 <li>Each season has 12 rounds, a mid-season rule change, and prize money by championship position.</li>
 <li>Between seasons, a new set of regulations rewrites one area (aero, engine, chassis or tires) and shakes up the order. Drivers age, and contracts end.</li>
 <li><b>Back up your career</b> from ☰ → Save & backup: download a save file or copy a save code. Some browsers (especially Safari) can delete saved games after a week without a visit. You can also install Pit Wall as an app from your browser's share or install menu.</li>
+</ul>
+<h3>Display options</h3>
+<ul>
+<li>☰ → <b>Color-blind palette</b> swaps the status colors to a set most color-blind players can tell apart. Status is never shown by color alone: tires have letters, telemetry has OK / WARM / HOT labels, and position changes have ▲ / ▼ arrows.</li>
+<li>☰ → <b>Larger text</b> scales the whole game up.</li>
 </ul>
 <h3>Daily Grand Prix</h3>
 <ul>
@@ -192,12 +198,19 @@ PW.openGuide = function () {
   });
   document.body.appendChild(m);
 };
+/* display options: colour-blind palette (Okabe-Ito) and larger text */
+PW.display = (() => { try { return JSON.parse(localStorage.getItem("pitwall-display") || "{}"); } catch (e) { return {}; } })();
+PW.applyDisplay = () => { document.documentElement.classList.toggle("cb", !!PW.display.cb); document.documentElement.classList.toggle("bigtext", !!PW.display.big); };
+PW.setDisplay = (k, v) => { PW.display[k] = v; try { localStorage.setItem("pitwall-display", JSON.stringify(PW.display)); } catch (e) {} PW.applyDisplay(); };
+PW.applyDisplay();
 PW.openMenu = function () {
   const m = document.createElement("div"); m.className = "modal"; m.style.zIndex = 90;
   m.innerHTML = `<div class="box" style="max-width:380px"><h2 style="margin-bottom:14px">Menu</h2><div class="grid">
     <button class="btn" data-m="guide">How to play</button>
     <button class="btn" data-m="tour">Replay the walkthrough</button>
     <button class="btn" data-m="backup">Save & backup</button>
+    <button class="btn" data-m="cb">Color-blind palette: ${PW.display.cb ? "On" : "Off"}</button>
+    <button class="btn" data-m="big">Larger text: ${PW.display.big ? "On" : "Off"}</button>
     <button class="btn" data-m="new">New career</button>
     <button class="btn ghost" data-m="close">Close</button></div></div>`;
   m.addEventListener("click", e => {
@@ -207,6 +220,7 @@ PW.openMenu = function () {
     const a = b && b.dataset.m;
     if (a === "guide") PW.openGuide();
     if (a === "backup") PW.openBackup();
+    if (a === "cb" || a === "big") { PW.setDisplay(a, !PW.display[a]); PW.openMenu(); }
     if (a === "tour") PW.tutorialReplay();
     if (a === "new" && confirm("Start a new career? Your current save will be erased.")) { PW.wipe(); PW.ui.reset(); }
   });

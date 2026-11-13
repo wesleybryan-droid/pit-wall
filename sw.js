@@ -1,6 +1,6 @@
 /* Pit Wall service worker: offline play. Serves from cache, refreshes in the background.
    Bump VERSION when files are added or removed. */
-const VERSION = "pitwall-v3";
+const VERSION = "pitwall-v4";
 const FILES = [
   "./",
   "index.html",

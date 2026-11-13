@@ -598,6 +598,59 @@ PW.raceResult = function (R) {
   };
 };
 
+/* ---------- broadcast-style insight cards (strategy numbers for your cars) ---------- */
+function histTrend(h) { const v = (h || []).filter(x => x != null); return v.length >= 2 ? v[v.length - 1] - v[v.length - 2] : 0; }
+PW.insights = function (R) {
+  const out = [];
+  if (!R.started || R.finished) return out;
+  const order = PW.raceOrder(R);
+  R.cars.filter(c => c.mine && !c.dnf && !c.finished && c.pitTimer <= 0 && c.lapIdx >= 1).forEach(car => {
+    const rem = R.laps - car.lapIdx, T = PW.TYRES[car.tyre];
+    const rate = Math.max(0.01, car.age > 0 ? car.wear / car.age : wearPerLap(R, car));
+    const lapsLeft = Math.max(0, (0.95 - car.wear) / rate);
+    const needCompound = !R.everWet && new Set(car.used.filter(t => t !== "W")).size < 2;
+    const fit = R.wet ? "W" : dryFor(R, car);
+    const ahead = order[car.pos - 2], behind = order[car.pos];
+    // pit window or tires to the end
+    if (rem > 2 && !R.sc) {
+      if (lapsLeft >= rem && !needCompound) out.push({ prio: 3, kind: "tyres", title: `Tire life · ${car.code}`, big: "To the end", sub: `${T.name}s have about ${Math.round(lapsLeft)} laps left with ${rem} to go.`, pct: 1 - car.wear });
+      else {
+        const from = Math.min(R.laps - 2, car.lapIdx + Math.max(1, Math.floor(lapsLeft - 2)));
+        const to = Math.min(R.laps - 2, Math.max(from + 1, car.lapIdx + Math.ceil(lapsLeft)));
+        const pp = PW.pitProjection(R, car);
+        out.push({ prio: lapsLeft < 3 ? 1 : 2, kind: "window", title: `Pit window · ${car.code}`, big: from >= to ? `Lap ${from}` : `Laps ${from}–${to}`,
+          sub: `Box for ${PW.TYRES[fit].name}s. Stopping now rejoins P${pp.pos}${pp.ahead ? `, ${pp.gapAhead.toFixed(1)}s behind ${pp.ahead.code}` : ""}.${needCompound && lapsLeft >= rem ? " You still need a second compound." : ""}`, pct: 1 - car.wear });
+      }
+    }
+    // battle forecast: catching the car ahead
+    const tA = histTrend(car.tel && car.tel.aheadHist);
+    if (ahead && !ahead.dnf && !R.sc && car.gapAheadS > 0.5 && car.gapAheadS < 5 && tA < -0.05) {
+      const n = Math.max(1, Math.ceil((car.gapAheadS - 0.5) / -tA));
+      if (n < rem) out.push({ prio: n <= 3 ? 1 : 2, kind: "battle", title: `Battle forecast · ${car.code}`, big: `~${n} lap${n > 1 ? "s" : ""}`, sub: `to catch ${ahead.name} for P${ahead.pos}. Closing ${(-tA).toFixed(1)}s a lap, gap ${car.gapAheadS.toFixed(1)}s.` });
+    }
+    // under pressure: car behind closing
+    const tB = histTrend(car.tel && car.tel.behindHist);
+    if (behind && !behind.dnf && !R.sc && behind.gapAheadS < 3 && tB < -0.05) {
+      const n = Math.max(1, Math.ceil((behind.gapAheadS - 0.5) / -tB));
+      out.push({ prio: n <= 2 ? 1 : 2, kind: "defend", title: `Under pressure · ${car.code}`, big: `${behind.code} +${behind.gapAheadS.toFixed(1)}s`, sub: `closing ${(-tB).toFixed(1)}s a lap. Within striking range in about ${n} lap${n > 1 ? "s" : ""}. Boost or Push to defend.` });
+    }
+    // undercut chance on the car ahead
+    if (ahead && !ahead.dnf && !ahead.mine && !R.wet && !R.sc && car.gapAheadS < 2.5 && rem > 6 && car.age >= 5 && ahead.age >= 4 && ahead.pitTimer <= 0) {
+      const gain = 2.6 * ahead.wear * ahead.wear + (PW.TYRES[ahead.tyre].pace - PW.TYRES[fit].pace);
+      const adv = 2 * gain - 0.6 - car.gapAheadS;
+      const pct = clamp(0.5 + adv / 2.5, 0.05, 0.9);
+      out.push({ prio: pct >= 0.55 ? 1 : 3, kind: "undercut", title: `Undercut on ${ahead.code} · ${car.code}`, big: `${Math.round(pct * 100)}%`, sub: `Fresh ${PW.TYRES[fit].name}s should be about ${Math.max(0, gain).toFixed(1)}s a lap faster than their ${ahead.age}-lap-old ${PW.TYRES[ahead.tyre].name.toLowerCase()}s. Box now to try it.`, pct });
+    }
+  });
+  // whole field: who's fastest right now
+  const live = order.filter(c => !c.dnf && !c.finished && c.lastLap && c.pitTimer <= 0);
+  if (live.length > 3 && !R.sc) {
+    const fast = live.slice().sort((a, b) => a.lastLap - b.lastLap)[0], lead = live[0];
+    out.push({ prio: 4, kind: "pace", title: "Fastest on track", big: fast.code, sub: `${fast.lastLap.toFixed(2)}s last lap${fast !== lead && lead.lastLap ? `, ${(lead.lastLap - fast.lastLap).toFixed(1)}s quicker than leader ${lead.code}` : ", and leading"}.` });
+  }
+  return out.sort((a, b) => a.prio - b.prio);
+};
+
 /* ---------- player controls ---------- */
 PW.boxCar = (R, car, tyre) => { car.pitReq = tyre; radio(R, `${car.code}: box, box. ${PW.TYRES[tyre].name}s ready.`, "", car); };
 PW.cancelBox = (R, car) => { car.pitReq = null; radio(R, `${car.code}: stay out, stay out.`, "", car); };

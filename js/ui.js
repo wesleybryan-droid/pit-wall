@@ -552,7 +552,7 @@ function renderRace() {
   app.innerHTML = `<div class="race">
     <div class="rbar"><div class="lap num" id="rLap"></div><div id="rFlag"></div>
       <div class="speed">${[["pause", "❚❚"], [1, "1×"], [2, "2×"], [4, "4×"], [8, "8×"]].map(([v, l]) => `<button class="btn sm" data-pd="speed" data-v="${v}" id="sp-${v}">${l}</button>`).join("")}<button class="btn sm" data-pd="simend" title="Skip to the finish">⏭</button><button class="btn sm" data-pd="autopause" id="apBtn" title="Pause automatically when there's a decision to make"></button><button class="btn sm" data-pd="slowmo" id="slBtn" title="Drop to 1x for battles, pit stops, incidents and the final lap"></button><button class="iconbtn" data-pd="sound">${Snd.on ? "🔊" : "🔇"}</button><button class="iconbtn" data-pd="guide" title="How to play">?</button></div></div>
-    <div class="mapwrap"><canvas id="map"></canvas><div class="tvbanner" id="rBanner"></div><div id="rDecision"></div><div class="lights" id="lights">${R.started ? "" : `<div class="rig">${"<i></i>".repeat(5)}</div>`}</div></div>
+    <div class="mapwrap"><canvas id="map"></canvas><div class="tvbanner" id="rBanner"></div><div id="rInsight"></div><div id="rDecision"></div><div class="lights" id="lights">${R.started ? "" : `<div class="rig">${"<i></i>".repeat(5)}</div>`}</div></div>
     <div class="tower"><div class="hd" data-pd="gapmode" title="Tap to switch between gap to leader and interval to car ahead"><span id="rGapMode"></span><span id="rWeather"></span></div><div id="tower"></div></div>
     <div class="ctl" id="ctl"></div>
     <div class="radio" id="radio"></div>
@@ -599,6 +599,7 @@ function updateRaceDom(full) {
   const slowmoOn = R.slowmo && R.speed > 1 && !R.paused && R.slowUntil > R.t && !R.finished;
   set("rFlag", (R.sc ? `<span class="flag sc">Safety car</span>` : R.wet ? `<span class="flag rain">Wet track</span>` : R.leaderDone ? `<span class="flag green">Chequered flag</span>` : "") + (slowmoOn ? `<span class="flag slowmo">Slow-mo · ${esc(R.slowWhy || "")}</span>` : ""));
   set("slBtn", R.slowmo ? "Slow-mo on" : "Slow-mo off");
+  set("rInsight", insightCard());
   const slb = document.getElementById("slBtn"); if (slb) slb.classList.toggle("on", R.slowmo);
   set("rWeather", (R.wet ? "🌧 Wet" : "☀ Dry") + (R.forecast ? (R.forecast.wet ? ` · rain ~L${R.forecast.lap}` : ` · drying ~L${R.forecast.lap}`) : ""));
   set("rGapMode", W.gapMode === "leader" ? "Gap to leader ⇄" : "Interval ⇄");
@@ -614,7 +615,9 @@ function updateRaceDom(full) {
   ["pause", 1, 2, 4, 8].forEach(v => { const b = document.getElementById("sp-" + v); if (b) b.classList.toggle("on", v === "pause" ? R.paused : (!R.paused && R.speed === v)); });
   set("tower", order.map((car, i) => {
     const fl = R.flash[car.id] && R.t - R.flash[car.id] < 3;
-    const st = car.dnf ? "OUT" : car.pitTimer > 0 ? "PIT" : car.finished ? "🏁" : car.boost ? "⚡" : "";
+    const prev = R.lapPos.length > 1 ? R.lapPos[R.lapPos.length - 2][car.id] : null, moved = prev ? prev - (i + 1) : 0;
+    const mv = moved > 0 ? `<b class="mv up">▲${moved}</b>` : moved < 0 ? `<b class="mv dn">▼${-moved}</b>` : "";
+    const st = car.dnf ? "OUT" : car.pitTimer > 0 ? "PIT" : car.finished ? "🏁" : (car.boost ? "⚡" : "") + mv;
     return `<div class="trow ${car.mine ? "me" : ""} ${fl ? "flash" : ""} ${car.dnf ? "out" : ""}"><span class="p num">${i + 1}</span><span class="c" style="background:${car.color}"></span><span class="cd">${car.code}</span><span class="st">${st}</span><span class="g num">${W.gapMode === "interval" && i > 0 ? intervalText(R, car, order[i - 1], leader) : PW.gapText(R, car, leader)}</span>${car.dnf ? "<span></span>" : tyre(car.tyre)}</div>`;
   }).join(""));
   // my cars
@@ -653,8 +656,8 @@ PW.onEvent = (race, type, d) => {
   if (type === "decision") return Snd.chime();
 };
 
-function teleCell(label, val, unit, cls, pct) {
-  return `<div class="tc ${cls}"><span>${label}</span><b class="num">${val}<small>${unit}</small></b><i style="width:${Math.max(4, Math.min(100, pct))}%"></i></div>`;
+function teleCell(label, val, unit, cls, pct, tag) {
+  return `<div class="tc ${cls}"><span>${label}${tag ? `<em class="tag-${cls}">${tag}</em>` : ""}</span><b class="num">${val}<small>${unit}</small></b><i style="width:${Math.max(4, Math.min(100, pct))}%"></i></div>`;
 }
 function trend(hist) {
   const h = hist.filter(x => x != null); if (h.length < 2) return "";
@@ -674,13 +677,24 @@ function telePanel(car, order) {
   const behindTxt = behind && !behind.dnf && behind.gapAheadS < 60 && !R.sc ? `<b>${behind.code}</b> ${behind.gapAheadS.toFixed(1)}s ${trend(t.behindHist)}` : "—";
   const pp = car.pitTimer > 0 ? null : PW.pitProjection(R, car);
   return `<div class="tele">
-    ${teleCell("Tires", T, "°C", tc, (T - 60) / 0.7)}
-    ${teleCell("Brakes", B, "°C", bc, (B - 300) / 7)}
-    ${teleCell("Engine", E, "°C", ec, (E - 80) / 0.5)}
-    ${teleCell("Fuel", (F >= 0 ? "+" : "") + F.toFixed(1), " laps", fc, 50 + F * 30)}
+    ${teleCell("Tires", T, "°C", tc, (T - 60) / 0.7, { cold: "COLD", bad: "HOT", warn: "WARM", good: "IDEAL", ok: "OK" }[tc])}
+    ${teleCell("Brakes", B, "°C", bc, (B - 300) / 7, { bad: "HOT", warn: "WARM", good: "OK" }[bc])}
+    ${teleCell("Engine", E, "°C", ec, (E - 80) / 0.5, { bad: "HOT", warn: "WARM", good: "OK" }[ec])}
+    ${teleCell("Fuel", (F >= 0 ? "+" : "") + F.toFixed(1), " laps", fc, 50 + F * 30, { bad: "SHORT", warn: "TIGHT", good: "OK" }[fc])}
   </div>
   <div class="gapline"><span>Ahead ${aheadTxt}</span><span>Behind ${behindTxt}</span></div>
   ${pp ? `<div class="pitproj">Box now → rejoin <b>P${pp.pos}</b>${pp.ahead ? `, ${pp.gapAhead.toFixed(1)}s behind ${pp.ahead.code}` : " in the lead"}${pp.behind && pp.gapBehind < 1.5 ? `, ${pp.behind.code} ${pp.gapBehind.toFixed(1)}s behind` : ""}</div>` : ""}`;
+}
+// rotate the most relevant strategy insight every few seconds
+function insightCard() {
+  if (!R || R.decision) return "";
+  const list = PW.insights(R); if (!list.length) return "";
+  const now = performance.now();
+  if (!R.insAt || now - R.insAt > 6500) { R.insAt = now; R.insIdx = (R.insIdx || 0) + 1; }
+  const top = list.filter(x => x.prio <= 2), pool = top.length ? top.concat(list.filter(x => x.prio > 2).slice(0, 1)) : list;
+  const c = pool[R.insIdx % pool.length];
+  const meter = c.pct != null ? `<div class="ins-m"><i style="width:${Math.round(c.pct * 100)}%"></i></div>` : "";
+  return `<div class="ins ${c.kind}"><div class="ins-t">${esc(c.title)}</div><div class="ins-b num">${esc(c.big)}</div>${meter}<div class="ins-s">${esc(c.sub)}</div>${pool.length > 1 ? `<div class="ins-d">${pool.map((_, i) => `<i class="${i === R.insIdx % pool.length ? "on" : ""}"></i>`).join("")}</div>` : ""}</div>`;
 }
 function autoPausePref() { try { return localStorage.getItem("pitwall-autopause") !== "off"; } catch (e) { return true; } }
 function decisionCard() {
